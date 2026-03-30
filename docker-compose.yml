@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: nume
       POSTGRES_DB: nume
     ports:
-      - "5432:5432"
+      - "${NUME_BIND_IP:-127.0.0.1}:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +22,7 @@ services:
       context: ./
       dockerfile: Dockerfile.api
     ports:
-      - "8000:8000"
+      - "${NUME_BIND_IP:-127.0.0.1}:8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://nume:nume@db:5432/nume
       NUME_REPO_ROOT: /workspace
@@ -47,6 +47,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      default:
+      homelab_public:
+        aliases:
+          - nume-api
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   specialist-student:
@@ -67,7 +72,7 @@ services:
       AZURE_OPENAI_MODEL: ${AZURE_OPENAI_MODEL:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-}
     ports:
-      - "8001:8001"
+      - "${NUME_BIND_IP:-127.0.0.1}:8001:8001"
     volumes:
       - ./:/workspace
     command: sh -c "pip install --no-cache-dir -r services/remote_specialists/requirements.txt && uvicorn services.remote_specialists.student_support.app:app --host 0.0.0.0 --port 8001 --reload"
@@ -90,7 +95,7 @@ services:
       AZURE_OPENAI_MODEL: ${AZURE_OPENAI_MODEL:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-}
     ports:
-      - "8002:8002"
+      - "${NUME_BIND_IP:-127.0.0.1}:8002:8002"
     volumes:
       - ./:/workspace
     command: sh -c "pip install --no-cache-dir -r services/remote_specialists/requirements.txt && uvicorn services.remote_specialists.caregiver_burnout.app:app --host 0.0.0.0 --port 8002 --reload"
@@ -100,10 +105,11 @@ services:
       context: ./apps/web
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "${NUME_BIND_IP:-127.0.0.1}:8080:8080"
     environment:
-      VITE_API_URL: http://localhost:8000
-      VITE_USE_MOCK_API: "false"
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      VITE_USE_MOCK_API: ${VITE_USE_MOCK_API:-false}
+      VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
     depends_on:
       - api
       - specialist-student
@@ -112,3 +118,8 @@ services:
 volumes:
   pgdata:
   garmin_tokens:
+
+networks:
+  homelab_public:
+    external: true
+    name: homelab_network

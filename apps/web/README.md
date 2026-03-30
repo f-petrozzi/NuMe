@@ -25,6 +25,17 @@ VITE_USE_MOCK_API=false
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_clerk_publishable_key
 ```
 
+For Cloudflare Pages production:
+
+```bash
+VITE_API_URL=https://api.nume-demo.com
+VITE_USE_MOCK_API=false
+VITE_CLERK_PUBLISHABLE_KEY=<your Clerk publishable key>
+```
+
+This app uses `BrowserRouter`, so the checked-in [`_redirects`](/mnt/ssd/homelab/NüMe/apps/web/public/_redirects)
+file is required for direct route loads on Cloudflare Pages.
+
 ## Current integration state
 
 - Clerk is wired into the frontend shell, route guards, and onboarding state.
@@ -42,7 +53,7 @@ The frontend publishable key is not enough for full live mode. The backend shoul
 ```bash
 CLERK_JWT_KEY=
 CLERK_FRONTEND_API_URL=
-CLERK_AUTHORIZED_PARTIES=http://localhost:8080
+CLERK_AUTHORIZED_PARTIES=https://nume-demo.com,https://www.nume-demo.com
 CLERK_SECRET_KEY=
 ```
 

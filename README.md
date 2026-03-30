@@ -33,8 +33,6 @@ docs/
     agents.md
     specialists.md
     frontend.md
-cloudflared/
-  config.yml        ← Cloudflare Tunnel routing (homelab HTTPS)
 ```
 
 ---
@@ -129,16 +127,16 @@ Starts: PostgreSQL, API (8000), specialist-student (8001), specialist-caregiver 
 
 ## Deployment (homelab + Cloudflare Tunnel)
 
-The backend runs on the homelab via Docker Compose and is exposed publicly via Cloudflare Tunnel.
+The backend runs on the homelab via Docker Compose and is exposed publicly through the shared
+homelab `cloudflared` service at the repo root.
 
-```bash
-# Start the tunnel (after cloudflared is configured)
-cloudflared tunnel run nume
-```
+Recommended public split:
 
-The frontend is deployed on Cloudflare Pages — connected to the GitHub repo, auto-deploys on push to `main`.
+- Frontend: Cloudflare Pages on `nume-demo.com`
+- API: Cloudflare Tunnel on `api.nume-demo.com`
 
-See `cloudflared/config.yml` for routing config.
+This repo no longer keeps a NüMe-local tunnel config. Manage the public hostname route from the
+parent homelab Cloudflare Tunnel instead.
 
 ---
 
