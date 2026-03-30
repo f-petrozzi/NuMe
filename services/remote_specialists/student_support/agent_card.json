@@ -1,0 +1,6 @@
+{
+  "name": "StudentSupportSpecialist",
+  "description": "Academic stress and campus support specialist for NüMe.",
+  "url": "http://localhost:8001/invoke",
+  "version": "0.1.0"
+}

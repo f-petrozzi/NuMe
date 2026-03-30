@@ -1,0 +1,114 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nume
+      POSTGRES_PASSWORD: nume
+      POSTGRES_DB: nume
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nume"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://nume:nume@db:5432/nume
+      NUME_REPO_ROOT: /workspace
+      STUDENT_SPECIALIST_URL: http://specialist-student:8001
+      CAREGIVER_SPECIALIST_URL: http://specialist-caregiver:8002
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_API_KEY: ${AZURE_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_BASE_URL: ${AZURE_OPENAI_BASE_URL:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-}
+      OPENAI_API_VERSION: ${OPENAI_API_VERSION:-}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
+      AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-}
+      AZURE_OPENAI_MODEL: ${AZURE_OPENAI_MODEL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+    volumes:
+      - ./apps/api:/app
+      - ./:/workspace
+      - garmin_tokens:/app/garmin_tokens
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  specialist-student:
+    image: python:3.11-slim
+    working_dir: /workspace
+    environment:
+      NUME_REPO_ROOT: /workspace
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_API_KEY: ${AZURE_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_BASE_URL: ${AZURE_OPENAI_BASE_URL:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-}
+      OPENAI_API_VERSION: ${OPENAI_API_VERSION:-}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
+      AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-}
+      AZURE_OPENAI_MODEL: ${AZURE_OPENAI_MODEL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./:/workspace
+    command: sh -c "pip install --no-cache-dir -r services/remote_specialists/requirements.txt && uvicorn services.remote_specialists.student_support.app:app --host 0.0.0.0 --port 8001 --reload"
+
+  specialist-caregiver:
+    image: python:3.11-slim
+    working_dir: /workspace
+    environment:
+      NUME_REPO_ROOT: /workspace
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_API_KEY: ${AZURE_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_BASE_URL: ${AZURE_OPENAI_BASE_URL:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-}
+      OPENAI_API_VERSION: ${OPENAI_API_VERSION:-}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
+      AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-}
+      AZURE_OPENAI_MODEL: ${AZURE_OPENAI_MODEL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./:/workspace
+    command: sh -c "pip install --no-cache-dir -r services/remote_specialists/requirements.txt && uvicorn services.remote_specialists.caregiver_burnout.app:app --host 0.0.0.0 --port 8002 --reload"
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      VITE_API_URL: http://localhost:8000
+      VITE_USE_MOCK_API: "false"
+    depends_on:
+      - api
+      - specialist-student
+      - specialist-caregiver
+
+volumes:
+  pgdata:
+  garmin_tokens:
