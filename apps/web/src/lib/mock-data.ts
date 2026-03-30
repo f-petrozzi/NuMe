@@ -42,27 +42,27 @@ export const mockSupportPlan: SupportPlan = {
     description: "You slept only 5.2 hours. Tonight, set a phone-down alarm at 10pm. Try the 4-7-8 breathing technique before bed.",
     priority: "high",
   },
-  empathy_message: "Hey Alex — I can see last night was rough and today's been stressful. You're doing more than you realize. Let's focus on small wins today: one good meal, one short walk, and getting to bed a little earlier. You've got this. 💚",
+  empathy_message: "Hey Alex. Last night was rough and today has been stressful. Focus on one good meal, one short walk, and getting to bed a little earlier tonight.",
   risk_level: "moderate",
   confidence: 0.82,
 };
 
 export const mockCases: Case[] = [
   { id: "c1", user_id: "u1", run_id: "r1", member_label: "Alex Rivera", member_email: "student@nume.demo", persona: "student", risk_level: "moderate", status: "open", summary: "Elevated stress + sleep deficit pattern over 3 days", created_at: "2026-03-28T10:30:00Z", updated_at: "2026-03-28T10:30:00Z" },
-  { id: "c2", user_id: "u2", member_label: "Maria Santos", member_email: "caregiver@nume.demo", persona: "caregiver", risk_level: "high", status: "in_progress", summary: "Caregiver burnout indicators — declining self-care metrics", created_at: "2026-03-27T14:00:00Z", updated_at: "2026-03-28T09:00:00Z" },
-  { id: "c3", user_id: "u4", member_label: "James Whitfield", member_email: "older_adult@nume.demo", persona: "older_adult", risk_level: "low", status: "closed", summary: "Routine check-in — all vitals within normal range", created_at: "2026-03-26T08:00:00Z", updated_at: "2026-03-27T16:00:00Z" },
+  { id: "c2", user_id: "u2", member_label: "Maria Santos", member_email: "caregiver@nume.demo", persona: "caregiver", risk_level: "high", status: "in_progress", summary: "Caregiver burnout indicators, declining self-care metrics", created_at: "2026-03-27T14:00:00Z", updated_at: "2026-03-28T09:00:00Z" },
+  { id: "c3", user_id: "u4", member_label: "James Whitfield", member_email: "older_adult@nume.demo", persona: "older_adult", risk_level: "low", status: "closed", summary: "Routine check-in, all vitals within normal range", created_at: "2026-03-26T08:00:00Z", updated_at: "2026-03-27T16:00:00Z" },
   { id: "c4", user_id: "u5", member_label: "Priya Kapoor", member_email: "student2@nume.demo", persona: "student", risk_level: "critical", status: "open", summary: "Severe sleep deprivation + academic crisis indicators", created_at: "2026-03-28T06:00:00Z", updated_at: "2026-03-28T11:00:00Z" },
 ];
 
 const traceMessages: AgentMessage[] = [
-  { id: "m1", run_id: "r1", agent_name: "coordinator", agent_type: "local", content: "Starting care coordination pipeline for user u1 (student persona). Dispatching parallel analysis agents.", timestamp: "2026-03-28T10:30:00Z" },
-  { id: "m2", run_id: "r1", agent_name: "signal_interpretation", agent_type: "parallel", content: "Analyzing recent signals: sleep=5.2h (below 7h threshold), stress=72 (elevated), steps=3200 (below 5000 target), mood=4/10 (low). Pattern: acute stress with sleep deficit.", timestamp: "2026-03-28T10:30:02Z", parent_id: "m1" },
+  { id: "m1", run_id: "r1", agent_name: "coordinator", agent_type: "local", content: "Starting care coordination pipeline for user u1. Estimating the support most likely to help, then dispatching parallel analysis agents.", timestamp: "2026-03-28T10:30:00Z" },
+  { id: "m2", run_id: "r1", agent_name: "signal_interpretation", agent_type: "parallel", content: "Analyzing recent health data: sleep=5.2h (below 7h threshold), stress=72 (elevated), steps=3200 (below 5000 target), mood=4/10 (low). Pattern: acute stress with sleep deficit.", timestamp: "2026-03-28T10:30:02Z", parent_id: "m1" },
   { id: "m3", run_id: "r1", agent_name: "risk_stratification", agent_type: "parallel", content: "Risk assessment: MODERATE (confidence: 0.82). Factors: 2+ days sleep < 6h, stress trending up, declining activity. Not yet critical but requires intervention.", timestamp: "2026-03-28T10:30:02Z", parent_id: "m1" },
   { id: "m4", run_id: "r1", agent_name: "intervention_planning", agent_type: "parallel", content: "Generated 3 interventions: (1) Anti-stress meal plan focusing on magnesium, (2) 15-min walk breaks between classes, (3) Sleep recovery protocol with phone-down alarm.", timestamp: "2026-03-28T10:30:02Z", parent_id: "m1" },
   { id: "m5", run_id: "r1", agent_name: "student_support", agent_type: "a2a", content: "A2A specialist response: Recommending campus counseling center (free for students), study group formation to reduce isolation, and academic advisor check-in for workload management.", timestamp: "2026-03-28T10:30:04Z", parent_id: "m1", is_a2a: true },
   { id: "m6", run_id: "r1", agent_name: "validation_loop", agent_type: "loop", content: "Iteration 1: Checking for contradictions in plan... Activity recommendation aligns with stress reduction goal. Meal plan supports sleep recovery. No conflicts detected.", timestamp: "2026-03-28T10:30:05Z", parent_id: "m1", loop_iteration: 1 },
-  { id: "m7", run_id: "r1", agent_name: "validation_loop", agent_type: "loop", content: "Iteration 2: Cross-referencing with persona profile... Student schedule considered. Recommendations are feasible within typical class schedule. Plan approved.", timestamp: "2026-03-28T10:30:06Z", parent_id: "m1", loop_iteration: 2 },
-  { id: "m8", run_id: "r1", agent_name: "empathy_checkin", agent_type: "local", content: "Generated empathy message tailored to student persona. Tone: supportive, non-judgmental, action-oriented. Includes acknowledgment of difficulty and concrete next steps.", timestamp: "2026-03-28T10:30:07Z", parent_id: "m1" },
+  { id: "m7", run_id: "r1", agent_name: "validation_loop", agent_type: "loop", content: "Iteration 2: Cross-referencing with the member context. Student schedule considered. Recommendations are feasible within a typical class schedule. Plan approved.", timestamp: "2026-03-28T10:30:06Z", parent_id: "m1", loop_iteration: 2 },
+  { id: "m8", run_id: "r1", agent_name: "empathy_checkin", agent_type: "local", content: "Generated empathy message tailored to the member's current needs. Tone: supportive, non-judgmental, action-oriented. Includes acknowledgment of difficulty and concrete next steps.", timestamp: "2026-03-28T10:30:07Z", parent_id: "m1" },
   { id: "m9", run_id: "r1", agent_name: "coordinator", agent_type: "local", content: "Pipeline complete. Support plan delivered. Case c1 created with moderate risk. Notifications sent.", timestamp: "2026-03-28T10:30:08Z" },
 ];
 

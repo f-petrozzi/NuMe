@@ -2,16 +2,16 @@
 
 > Become the new you, with NüMe.
 
-NüMe is a personalized wellness platform that turns wearable signals, check-ins, and routines into guidance you can actually use.
+NüMe is a personalized wellness platform that turns sleep, stress, activity, and check-ins into guidance you can actually use.
 
-Live demo:
-- Frontend: `https://nume-demo.com`
-- API health: `https://api.nume-demo.com/health`
+Product:
+- Frontend: [nume-demo.com](https://nume-demo.com)
+- API health: [api.nume-demo.com/health](https://api.nume-demo.com/health)
 
 ## What the Demo Shows
 
 - A member-facing dashboard that adapts recommendations around sleep, stress, movement, and self-reported check-ins
-- Persona-aware support flows for students, caregivers, older adults, and accessibility-focused users
+- Support flows that adapt based on what is most likely to help each member next
 - A traceable multi-agent backend that produces explainable support plans instead of opaque single-shot outputs
 - An end-to-end deployment path: Cloudflare Pages frontend, FastAPI API, PostgreSQL, Docker Compose, Doppler secrets, and Cloudflare Tunnel
 
@@ -85,9 +85,9 @@ Notes:
 Production is split intentionally:
 
 - `nume-demo.com` serves the frontend from Cloudflare Pages
-- `api.nume-demo.com` routes to the homelab API through the shared parent-homelab Cloudflare Tunnel
+- `api.nume-demo.com` routes to the API through Cloudflare Tunnel
 
-This repo no longer uses a NüMe-local `cloudflared` config. Tunnel routing is managed from the parent homelab stack.
+This repo no longer uses a NüMe-local `cloudflared` config. Tunnel routing is managed in the shared infrastructure stack.
 
 ## Selected Docs
 

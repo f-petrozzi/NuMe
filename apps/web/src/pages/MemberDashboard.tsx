@@ -64,7 +64,7 @@ export default function MemberDashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Good morning, {user?.full_name?.split(" ")[0]} 👋</h1>
+          <h1 className="text-2xl font-bold">Good morning, {user?.full_name?.split(" ")[0]}</h1>
           <p className="text-muted-foreground">Here's your personalized NüMe plan for today</p>
         </div>
         <Badge variant="outline" className={`text-sm px-3 py-1 ${risk.className}`}>

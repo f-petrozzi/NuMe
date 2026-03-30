@@ -4,6 +4,10 @@ import { Link } from "react-router-dom";
 import { Network } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
+function formatSupportFit(value: string): string {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export default function TracesListPage() {
   const { data: runs } = useQuery({
     queryKey: ["runs"],
@@ -38,10 +42,12 @@ export default function TracesListPage() {
           >
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <p className="font-semibold text-sm">
-                  {run.member_label || `Member #${run.user_id}`}
-                  {run.persona ? ` · ${run.persona.replace("_", " ")}` : ""}
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-sm">{run.member_label || `Member #${run.user_id}`}</p>
+                  {run.persona ? (
+                    <Badge variant="outline" className="text-xs">Best fit: {formatSupportFit(run.persona)}</Badge>
+                  ) : null}
+                </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   Run {run.id}
                   {run.risk_level ? ` · ${run.risk_level} risk` : " · Awaiting analysis"}

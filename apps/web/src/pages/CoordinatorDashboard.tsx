@@ -18,6 +18,10 @@ const statusConfig: Record<CaseStatus, { icon: React.ElementType; label: string;
   closed: { icon: CheckCircle2, label: "Closed", className: "text-success" },
 };
 
+function formatSupportFit(value: string): string {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export default function CoordinatorDashboard() {
   const { data: cases } = useQuery({ queryKey: ["cases"], queryFn: getCases });
 
@@ -67,7 +71,7 @@ export default function CoordinatorDashboard() {
                   <div className="flex flex-wrap items-center gap-2 mb-1">
                     <span className="font-semibold text-sm">{c.member_label || `Member #${c.user_id}`}</span>
                     {c.persona ? (
-                      <Badge variant="outline" className="text-xs capitalize">{c.persona.replace("_", " ")}</Badge>
+                      <Badge variant="outline" className="text-xs">Best fit: {formatSupportFit(c.persona)}</Badge>
                     ) : null}
                     <Badge variant="outline" className={`text-xs ${riskColors[c.risk_level]}`}>
                       {c.risk_level} risk

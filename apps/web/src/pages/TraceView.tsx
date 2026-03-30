@@ -28,6 +28,10 @@ const agentColors: Partial<Record<AgentName, string>> = {
   caregiver_burnout: "border-warning bg-warning/5",
 };
 
+function formatSupportFit(value: string): string {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export default function TraceView() {
   const { runId } = useParams<{ runId: string }>();
   const { data: run } = useQuery({
@@ -72,10 +76,10 @@ export default function TraceView() {
           <div>
             <h1 className="text-2xl font-bold">Agent Trace</h1>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span>
-                {run.member_label || `Member #${run.user_id}`}
-                {run.persona ? ` · ${run.persona.replace("_", " ")}` : ""}
-              </span>
+              <span>{run.member_label || `Member #${run.user_id}`}</span>
+              {run.persona ? (
+                <Badge variant="outline" className="text-xs">Best fit: {formatSupportFit(run.persona)}</Badge>
+              ) : null}
               <Badge variant="outline" className="capitalize">
                 {run.status}
               </Badge>

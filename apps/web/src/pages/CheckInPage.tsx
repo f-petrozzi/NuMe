@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
-import { ClipboardCheck, Loader2, ArrowRight } from "lucide-react";
+import { ClipboardCheck, Loader2, ArrowRight, Frown, Meh, Smile } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function CheckInPage() {
@@ -29,8 +29,15 @@ export default function CheckInPage() {
     },
   });
 
-  const moodLabels = ["😞", "😕", "😐", "🙂", "😊"];
-  const moodLabel = moodLabels[Math.min(Math.floor(mood / 2.5), 4)];
+  const moodStates = [
+    { icon: Frown, label: "Very low" },
+    { icon: Frown, label: "Low" },
+    { icon: Meh, label: "Okay" },
+    { icon: Smile, label: "Good" },
+    { icon: Smile, label: "Great" },
+  ] as const;
+  const moodState = moodStates[Math.min(Math.floor(mood / 2.5), 4)];
+  const MoodIcon = moodState.icon;
 
   return (
     <div className="p-6 lg:p-10 max-w-lg mx-auto space-y-8">
@@ -44,7 +51,10 @@ export default function CheckInPage() {
 
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
         <div className="space-y-3">
-          <Label className="text-sm font-semibold">Mood {moodLabel}</Label>
+          <Label className="flex items-center gap-2 text-sm font-semibold">
+            <MoodIcon className="h-4 w-4 text-primary" />
+            Mood: {moodState.label}
+          </Label>
           <Slider value={[mood]} onValueChange={([v]) => setMood(v)} min={1} max={10} step={1} />
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>Very low</span><span>Great</span>
@@ -52,7 +62,7 @@ export default function CheckInPage() {
         </div>
 
         <div className="space-y-3">
-          <Label className="text-sm font-semibold">Sleep — {sleep}h</Label>
+          <Label className="text-sm font-semibold">Sleep: {sleep}h</Label>
           <Slider value={[sleep]} onValueChange={([v]) => setSleep(v)} min={0} max={12} step={0.5} />
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>0h</span><span>12h</span>
@@ -60,7 +70,7 @@ export default function CheckInPage() {
         </div>
 
         <div className="space-y-3">
-          <Label className="text-sm font-semibold">Stress level — {stress}%</Label>
+          <Label className="text-sm font-semibold">Stress level: {stress}%</Label>
           <Slider value={[stress]} onValueChange={([v]) => setStress(v)} min={0} max={100} step={5} />
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>Calm</span><span>Very stressed</span>

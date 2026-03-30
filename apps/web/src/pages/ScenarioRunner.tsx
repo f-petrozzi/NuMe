@@ -8,6 +8,10 @@ import { FlaskConical, Play, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import type { AgentRun } from "@/lib/types";
 
+function formatSupportFit(value: string): string {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export default function ScenarioRunner() {
   const [selected, setSelected] = useState<string | null>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -65,7 +69,7 @@ export default function ScenarioRunner() {
           >
             <div className="flex items-center gap-2 mb-1">
               <span className="font-semibold text-sm">{sc.label}</span>
-              <Badge variant="outline" className="text-xs capitalize">{sc.persona.replace("_", " ")}</Badge>
+              <Badge variant="outline" className="text-xs">Best fit: {formatSupportFit(sc.persona)}</Badge>
             </div>
             <p className="text-sm text-muted-foreground">{sc.description}</p>
           </motion.button>

@@ -37,7 +37,7 @@ export default function AuthShell({
             transition={{ delay: 0.35 }}
             className="text-sidebar-foreground/70 text-lg leading-relaxed"
           >
-            NüMe turns your daily signals, routines, and check-ins into personalized guidance you can actually use.
+            NüMe turns sleep, stress, activity, and check-ins into guidance you can actually use.
           </motion.p>
         </div>
         <p className="text-xs text-sidebar-foreground/40">© 2026 NüMe</p>

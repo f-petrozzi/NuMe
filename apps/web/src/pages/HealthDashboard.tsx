@@ -78,7 +78,7 @@ function fmtDuration(seconds: number): string {
 }
 
 function fmtDistance(meters: number): string {
-  if (meters === 0) return "—";
+  if (meters === 0) return "0 m";
   return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${meters} m`;
 }
 
@@ -99,9 +99,15 @@ function sleepQuality(score: number): { label: string; color: string } {
   return { label: "Poor", color: "text-red-500" };
 }
 
-const ACTIVITY_ICONS: Record<string, string> = {
-  running: "🏃", cycling: "🚴", walking: "🚶", swimming: "🏊",
-  strength_training: "🏋️", yoga: "🧘", hiking: "🥾", elliptical: "⚙️",
+const ACTIVITY_ICONS: Record<string, React.ElementType> = {
+  running: Footprints,
+  cycling: Activity,
+  walking: Footprints,
+  swimming: Activity,
+  strength_training: Zap,
+  yoga: Sparkles,
+  hiking: Footprints,
+  elliptical: Activity,
 };
 
 // ---------------------------------------------------------------------------
@@ -151,7 +157,7 @@ function GarminPanel() {
       qc.invalidateQueries({ queryKey: ["daily-metrics"] });
       qc.invalidateQueries({ queryKey: ["sleep-history"] });
       qc.invalidateQueries({ queryKey: ["activities"] });
-      toast({ title: "Sync complete", description: `${result.synced ?? "—"} days updated.` });
+      toast({ title: "Sync complete", description: `${result.synced ?? 0} days updated.` });
     },
     onError: (err: Error) => {
       toast({ title: "Sync failed", description: err.message, variant: "destructive" });
@@ -175,13 +181,13 @@ function GarminPanel() {
           )}
           <div>
             <p className="text-sm font-medium">
-              {connected ? `Garmin connected${status?.garmin_email ? ` — ${status.garmin_email}` : ""}` : "Garmin not connected"}
+              {connected ? `Garmin connected${status?.garmin_email ? `: ${status.garmin_email}` : ""}` : "Garmin not connected"}
             </p>
             {connected && status?.last_sync && (
               <p className="text-xs text-muted-foreground">Last sync: {fmtDateTime(status.last_sync)}</p>
             )}
             {!connected && (
-              <p className="text-xs text-muted-foreground">Connect to sync wearable data automatically</p>
+              <p className="text-xs text-muted-foreground">Connect to sync health data automatically</p>
             )}
           </div>
         </div>
@@ -384,7 +390,7 @@ function TrendsTab() {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <Zap className="h-8 w-8 mb-3 opacity-40" />
-        <p className="text-sm">No trend data yet — connect Garmin and sync to see history.</p>
+        <p className="text-sm">No trend data yet. Connect Garmin and sync to see history.</p>
       </div>
     );
   }
@@ -403,7 +409,7 @@ function TrendsTab() {
         ))}
       </div>
       <div className="rounded-xl border border-border bg-card p-4">
-        <p className="text-xs text-muted-foreground mb-4">{selected.label} — last 30 days</p>
+        <p className="text-xs text-muted-foreground mb-4">{selected.label}, last 30 days</p>
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -447,7 +453,7 @@ function SleepTab() {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <Moon className="h-8 w-8 mb-3 opacity-40" />
-        <p className="text-sm">No sleep data yet — connect Garmin to see your sleep history.</p>
+        <p className="text-sm">No sleep data yet. Connect Garmin to see your sleep history.</p>
       </div>
     );
   }
@@ -508,7 +514,7 @@ function ActivityTab() {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <Activity className="h-8 w-8 mb-3 opacity-40" />
-        <p className="text-sm">No activities yet — connect Garmin to import your workouts.</p>
+        <p className="text-sm">No activities yet. Connect Garmin to import your workouts.</p>
       </div>
     );
   }
@@ -516,7 +522,7 @@ function ActivityTab() {
   return (
     <div className="space-y-3">
       {activities.map((a, i) => {
-        const emoji = ACTIVITY_ICONS[a.activity_type] ?? "🏃";
+        const Icon = ACTIVITY_ICONS[a.activity_type] ?? Activity;
         return (
           <motion.div
             key={a.id}
@@ -525,7 +531,9 @@ function ActivityTab() {
             transition={{ delay: i * 0.04 }}
             className="flex items-center gap-4 p-4 rounded-xl border border-border bg-card"
           >
-            <span className="text-2xl">{emoji}</span>
+            <div className="rounded-lg bg-accent p-2">
+              <Icon className="h-5 w-5 text-accent-foreground" />
+            </div>
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm capitalize">{a.activity_name}</p>
               <p className="text-xs text-muted-foreground">{fmtDateTime(a.start_time)}</p>

@@ -28,7 +28,7 @@ const personas = [
 ] as const;
 
 const ageRanges = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
-const sexOptions = ["female", "male", "non_binary", "prefer_not_to_say"];
+const sexOptions = ["female", "male", "prefer_not_to_say"];
 const goalOptions = [
   { value: "stress_reduction", label: "Stress Reduction" },
   { value: "better_sleep", label: "Better Sleep" },
@@ -133,13 +133,13 @@ export default function OnboardingPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold">Set up your NüMe profile</h1>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            This gives NüMe the context it needs to personalize guidance, accessibility preferences, and daily recommendations around how you actually live.
+            This gives NüMe the context it needs to figure out what kind of support is most likely to help and how to tailor daily recommendations around your routine.
           </p>
         </div>
 
         <div className="space-y-8">
           <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <Label className="mb-4 block text-sm font-semibold">Which experience best matches you?</Label>
+            <Label className="mb-4 block text-sm font-semibold">What kind of support fits you best right now?</Label>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               {personas.map((persona) => (
                 <button
@@ -182,10 +182,10 @@ export default function OnboardingPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Sex</Label>
+                <Label>Gender</Label>
                 <Select value={form.sex} onValueChange={(value) => updateForm("sex", value)}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select sex" />
+                    <SelectValue placeholder="Select gender" />
                   </SelectTrigger>
                   <SelectContent>
                     {sexOptions.map((option) => (
