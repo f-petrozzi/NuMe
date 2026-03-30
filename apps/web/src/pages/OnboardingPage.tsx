@@ -131,9 +131,9 @@ export default function OnboardingPage() {
         </div>
 
         <div className="mb-8">
-          <h1 className="text-3xl font-bold">Build your care profile</h1>
+          <h1 className="text-3xl font-bold">Set up your NüMe profile</h1>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            This gives the care coordination system the context it needs to personalize recommendations, accessibility preferences, and support routing.
+            This gives NüMe the context it needs to personalize guidance, accessibility preferences, and daily recommendations around how you actually live.
           </p>
         </div>
 

@@ -6,7 +6,7 @@ export default function LoginPage() {
   return (
     <AuthShell
       title="Welcome back"
-      description="Sign in to your care dashboard"
+      description="Sign in to your personal wellness dashboard"
       footer={(
         <p className="text-sm text-center text-muted-foreground mt-6">
           Don't have an account?{" "}

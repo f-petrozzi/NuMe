@@ -27,7 +27,7 @@ export default function CoordinatorDashboard() {
         <Users className="h-6 w-6 text-primary" />
         <div>
           <h1 className="text-2xl font-bold">Care Cases</h1>
-          <p className="text-muted-foreground">Monitor and manage active care cases</p>
+          <p className="text-muted-foreground">Monitor and manage active member journeys</p>
         </div>
       </div>
 

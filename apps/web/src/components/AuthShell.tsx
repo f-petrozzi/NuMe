@@ -27,9 +27,9 @@ export default function AuthShell({
             transition={{ delay: 0.2 }}
             className="text-4xl font-bold text-sidebar-primary-foreground leading-tight mb-4"
           >
-            Adaptive care,
+            Become the new you,
             <br />
-            <span className="text-sidebar-primary">powered by empathy.</span>
+            <span className="text-sidebar-primary">with NüMe.</span>
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
@@ -37,10 +37,10 @@ export default function AuthShell({
             transition={{ delay: 0.35 }}
             className="text-sidebar-foreground/70 text-lg leading-relaxed"
           >
-            Multi-agent AI that turns your wearable signals into personalized, compassionate support plans.
+            NüMe turns your daily signals, routines, and check-ins into personalized guidance you can actually use.
           </motion.p>
         </div>
-        <p className="text-xs text-sidebar-foreground/40">© 2026 NüMe · HackUSF</p>
+        <p className="text-xs text-sidebar-foreground/40">© 2026 NüMe</p>
       </div>
 
       <div className="flex-1 flex items-center justify-center p-6 sm:p-12 bg-background">

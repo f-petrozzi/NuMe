@@ -47,7 +47,7 @@ export default function ScenarioRunner() {
         <FlaskConical className="h-6 w-6 text-primary" />
         <div>
           <h1 className="text-2xl font-bold">Scenario Runner</h1>
-          <p className="text-muted-foreground">Simulate care scenarios to test the agent pipeline</p>
+          <p className="text-muted-foreground">Run guided demo scenarios to showcase the NüMe decision flow</p>
         </div>
       </div>
 

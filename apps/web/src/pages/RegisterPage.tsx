@@ -6,7 +6,7 @@ export default function RegisterPage() {
   return (
     <AuthShell
       title="Create your account"
-      description="Start your personalized care journey"
+      description="Start your personalized wellness journey"
       footer={(
         <p className="text-sm text-center text-muted-foreground mt-6">
           Already have an account? <Link to="/login" className="text-primary font-medium hover:underline">Sign in</Link>
