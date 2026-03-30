@@ -1,180 +1,100 @@
 # NüMe
 
-A multi-agent health coordination platform that turns wearable signals and behavioral patterns into adaptive, empathetic, actionable support — built on Google ADK.
+> Become the new you, with NüMe.
 
----
+NüMe is a personalized wellness platform that turns wearable signals, check-ins, and routines into guidance you can actually use.
 
-## What it does
+Live demo:
+- Frontend: `https://nume-demo.com`
+- API health: `https://api.nume-demo.com/health`
 
-NüMe monitors your health signals (sleep, stress, steps, mood) and runs a team of AI agents in parallel to produce a personalized support plan. Based on your persona — stressed student, exhausted caregiver, older adult — it routes to the right specialist, validates the plan, and delivers empathy-first recommendations with a full traceable audit trail.
+## What the Demo Shows
 
----
+- A member-facing dashboard that adapts recommendations around sleep, stress, movement, and self-reported check-ins
+- Persona-aware support flows for students, caregivers, older adults, and accessibility-focused users
+- A traceable multi-agent backend that produces explainable support plans instead of opaque single-shot outputs
+- An end-to-end deployment path: Cloudflare Pages frontend, FastAPI API, PostgreSQL, Docker Compose, Doppler secrets, and Cloudflare Tunnel
 
-## Repo structure
+## Why It Is Useful For Hiring Managers
 
-```
-apps/
-  api/              ← FastAPI backend
-  web/              ← Vite + React frontend
-services/
-  agents/           ← Google ADK local agent pipeline
-  tools/            ← ADK tool layer — HTTP wrappers for the API
-  remote_specialists/ ← A2A specialist servers
-packages/
-  shared-types/     ← Pydantic v2 models shared across all services
-infra/
-  seed/             ← Database seed script
-scripts/
-  garmin_bootstrap.py ← One-time Garmin OAuth setup
-docs/
-  api-contracts.md  ← All endpoint shapes
-  setup/            ← Setup guides
-    backend.md
-    agents.md
-    specialists.md
-    frontend.md
-```
+- Product thinking: the repo is not just a model demo, it is a user-facing workflow from onboarding through daily recommendations
+- Full-stack ownership: frontend, backend, auth, persistence, deployment, and production routing all live in one system
+- AI systems design: the orchestration layer separates coordination, specialist routing, validation, and traceability
+- Practical deployment: this project is live on a real domain with a split frontend/API architecture instead of staying local-only
 
----
+## Architecture
 
-## Secrets setup (Doppler — required before running anything)
-
-Secrets are managed via [Doppler](https://doppler.com) — no `.env` files, no keys in the repo.
-
-### Install Doppler CLI
-
-**macOS:**
-```bash
-brew install dopplerhq/cli/doppler
+```text
+Cloudflare Pages (React/Vite frontend)
+        |
+        v
+  api.nume-demo.com
+        |
+Cloudflare Tunnel
+        |
+        v
+FastAPI API -> PostgreSQL
+        |
+        +-> coordinator agent
+        +-> student specialist
+        +-> caregiver specialist
+        +-> tools / shared models
 ```
 
-**Ubuntu/Debian:**
-```bash
-curl -Ls --tlsv1.2 --proto "=https" --retry 3 https://cli.doppler.com/install.sh | sudo sh
-```
+Core code layout:
 
-### Authenticate and link project
+- `apps/web` - React + Vite frontend
+- `apps/api` - FastAPI backend
+- `services/remote_specialists` - specialist agent services
+- `services/tools` - API-facing tool layer
+- `packages/shared-types` - shared Pydantic models
+- `infra/seed` - demo data seeding
 
-```bash
-doppler login
-doppler setup   # links to the `nume` project (doppler.yaml auto-fills this)
-```
+## Stack
 
-### Verify
+- Frontend: React, TypeScript, Vite, Clerk
+- Backend: FastAPI, SQLAlchemy, PostgreSQL
+- AI layer: Google ADK-style multi-agent orchestration and specialist routing
+- Infra: Docker Compose, Doppler, Cloudflare Pages, Cloudflare Tunnel
 
-```bash
-doppler secrets
-# Should list all environment variables without showing values
-```
+## Run Locally
 
-After this, prefix every command with `doppler run --`:
+Prereqs: Docker, Python 3.11+, Node 18+, Doppler CLI
 
 ```bash
-doppler run -- uvicorn main:app --reload --port 8000
-doppler run -- alembic upgrade head
-doppler run -- python ../../infra/seed/seed.py
-```
-
----
-
-## Quick start (local)
-
-**Prerequisites:** Docker, Python 3.11+, Node 18+, Doppler CLI
-
-```bash
-# 1. Clone the repo
-git clone https://github.com/<your-username>/NuMe.git
+git clone https://github.com/f-petrozzi/NuMe.git
 cd NuMe
-
-# 2. Set up Doppler (see above)
 doppler setup
-
-# 3. Start PostgreSQL
-docker compose up db -d
-
-# 4. Start the API
-cd apps/api
-pip install -r requirements.txt
-doppler run -- alembic upgrade head
-doppler run -- python ../../infra/seed/seed.py
-doppler run -- uvicorn main:app --reload --port 8000
-
-# 5. Verify
-curl http://localhost:8000/health
-# → {"status": "ok", "service": "nume-api"}
+doppler run -- docker compose up -d
+doppler run -- docker compose exec -T api python /workspace/infra/seed/seed.py
 ```
 
-API docs: `http://localhost:8000/docs`
+Local endpoints:
 
-**Seeded demo accounts (linked by email when signing in with Clerk):**
-| Email | Role |
-|---|---|
-| student@nume.demo | member |
-| caregiver@nume.demo | member |
-| admin@nume.demo | admin |
+- Frontend: `http://localhost:8080`
+- API docs: `http://localhost:8000/docs`
 
----
+Notes:
 
-## Full stack (Docker Compose)
+- Secrets are managed through Doppler
+- On a fresh database, the API initializes tables on startup
+- The seed script provisions demo users and sample health data
 
-```bash
-doppler run -- docker compose up
-```
+## Deployment
 
-Starts: PostgreSQL, API (8000), specialist-student (8001), specialist-caregiver (8002), web (8080).
+Production is split intentionally:
 
----
+- `nume-demo.com` serves the frontend from Cloudflare Pages
+- `api.nume-demo.com` routes to the homelab API through the shared parent-homelab Cloudflare Tunnel
 
-## Deployment (homelab + Cloudflare Tunnel)
+This repo no longer uses a NüMe-local `cloudflared` config. Tunnel routing is managed from the parent homelab stack.
 
-The backend runs on the homelab via Docker Compose and is exposed publicly through the shared
-homelab `cloudflared` service at the repo root.
+## Selected Docs
 
-Recommended public split:
-
-- Frontend: Cloudflare Pages on `nume-demo.com`
-- API: Cloudflare Tunnel on `api.nume-demo.com`
-
-This repo no longer keeps a NüMe-local tunnel config. Manage the public hostname route from the
-parent homelab Cloudflare Tunnel instead.
-
----
-
-## Agent architecture
-
-```
-POST /api/runs/trigger
-  ↓
-coordinator (SequentialAgent)
-  ├── ParallelAgent
-  │   ├── SignalInterpretationAgent
-  │   ├── RiskStratificationAgent
-  │   └── InterventionPlanningAgent
-  ├── EmpathyCheckinAgent
-  ├── ValidationLoopAgent (LoopAgent)
-  └── RemoteA2aAgent → StudentSupportSpecialist (8001)
-                     → CaregiverBurnoutSpecialist (8002)
-  ↓
-services/tools/ → HTTP calls to API → PostgreSQL
-```
-
----
-
-## Key docs
-
-| Doc | Purpose |
-|---|---|
-| `docs/api-contracts.md` | All endpoint shapes and request/response bodies |
-| `docs/prompts.md` | System prompts for each agent |
-| `docs/technical-requirements.md` | Full feature requirements and DB schema |
-| `docs/setup/backend.md` | Backend setup |
-| `docs/setup/agents.md` | ADK agent setup |
-| `docs/setup/specialists.md` | A2A specialist setup |
-| `docs/setup/frontend.md` | Frontend setup |
-| `packages/shared-types/models.py` | Pydantic models for agent I/O |
-
----
-
-## Environment variables
-
-All secrets managed via Doppler (`nume` project). See `.env.example` for the full variable list.
+- `docs/api-contracts.md` - request/response shapes
+- `docs/architecture.md` - system design notes
+- `docs/tech-stack.md` - implementation choices
+- `docs/setup/backend.md` - backend setup details
+- `docs/setup/frontend.md` - frontend setup details
+- `docs/setup/agents.md` - agent setup details
+- `docs/prompts.md` - prompt/system behavior references
