@@ -54,6 +54,16 @@ async def test_list_calorie_log_filters_by_date(client: AsyncClient):
     assert body[0]["log_date"] == "2026-03-29"
 
 
+async def test_readiness_check_reports_database_ok(client: AsyncClient):
+    resp = await client.get("/readyz")
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {
+        "status": "ok",
+        "service": "nume-api",
+        "database": "ok",
+    }
+
+
 async def test_generate_text_missing_openai_package_raises_actionable_error(monkeypatch):
     real_import = builtins.__import__
     monkeypatch.setenv("OPENAI_API_VERSION", "2025-01-01-preview")

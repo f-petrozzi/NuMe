@@ -23,11 +23,11 @@ class CaseCreate(BaseModel):
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
 
-def _member_label(email: str | None, user_id: int) -> str:
-    if not email:
+def _member_label(identifier: str | None, user_id: int) -> str:
+    if not identifier:
         return f"Member #{user_id}"
 
-    local_part = email.split("@")[0].strip()
+    local_part = identifier.split("@")[0].strip()
     cleaned = re.sub(r"[._+-]+", " ", local_part)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned.title() or f"Member #{user_id}"
@@ -37,6 +37,7 @@ def _serialize_case(
     case: Case,
     *,
     member_email: str | None,
+    member_username: str | None,
     persona_type: str | None,
     summary: str | None,
 ) -> CaseOut:
@@ -50,7 +51,7 @@ def _serialize_case(
             "status": case.status,
             "created_at": case.created_at,
             "updated_at": case.updated_at,
-            "member_label": _member_label(member_email, case.user_id),
+            "member_label": _member_label(member_email or member_username, case.user_id),
             "member_email": member_email,
             "persona_type": persona_type,
             "summary": resolved_summary,
@@ -60,7 +61,7 @@ def _serialize_case(
 
 async def _fetch_case_row(db: AsyncSession, case_id: int):
     result = await db.execute(
-        select(Case, User.email, UserProfile.persona_type, NormalizedEvent.summary)
+        select(Case, User.email, User.username, UserProfile.persona_type, NormalizedEvent.summary)
         .join(User, User.id == Case.user_id)
         .outerjoin(UserProfile, UserProfile.user_id == Case.user_id)
         .outerjoin(AgentRun, AgentRun.id == Case.run_id)
@@ -89,8 +90,14 @@ async def create_case(
     if row is None:
         return case
 
-    case, member_email, persona_type, summary = row
-    return _serialize_case(case, member_email=member_email, persona_type=persona_type, summary=summary)
+    case, member_email, member_username, persona_type, summary = row
+    return _serialize_case(
+        case,
+        member_email=member_email,
+        member_username=member_username,
+        persona_type=persona_type,
+        summary=summary,
+    )
 
 
 @router.get("", response_model=List[CaseOut])
@@ -99,7 +106,7 @@ async def list_cases(
     db: AsyncSession = Depends(get_db),
 ):
     query = (
-        select(Case, User.email, UserProfile.persona_type, NormalizedEvent.summary)
+        select(Case, User.email, User.username, UserProfile.persona_type, NormalizedEvent.summary)
         .join(User, User.id == Case.user_id)
         .outerjoin(UserProfile, UserProfile.user_id == Case.user_id)
         .outerjoin(AgentRun, AgentRun.id == Case.run_id)
@@ -112,8 +119,14 @@ async def list_cases(
 
     result = await db.execute(query)
     return [
-        _serialize_case(case, member_email=email, persona_type=persona_type, summary=summary)
-        for case, email, persona_type, summary in result.all()
+        _serialize_case(
+            case,
+            member_email=email,
+            member_username=username,
+            persona_type=persona_type,
+            summary=summary,
+        )
+        for case, email, username, persona_type, summary in result.all()
     ]
 
 
@@ -127,10 +140,16 @@ async def get_case(
     if row is None:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    case, member_email, persona_type, summary = row
+    case, member_email, member_username, persona_type, summary = row
     if not is_staff(user) and case.user_id != user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
-    return _serialize_case(case, member_email=member_email, persona_type=persona_type, summary=summary)
+    return _serialize_case(
+        case,
+        member_email=member_email,
+        member_username=member_username,
+        persona_type=persona_type,
+        summary=summary,
+    )
 
 
 @router.put("/{case_id}/status", response_model=CaseOut)
@@ -154,5 +173,11 @@ async def update_case_status(
     if row is None:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    case, member_email, persona_type, summary = row
-    return _serialize_case(case, member_email=member_email, persona_type=persona_type, summary=summary)
+    case, member_email, member_username, persona_type, summary = row
+    return _serialize_case(
+        case,
+        member_email=member_email,
+        member_username=member_username,
+        persona_type=persona_type,
+        summary=summary,
+    )

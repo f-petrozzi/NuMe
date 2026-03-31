@@ -62,8 +62,8 @@ function titleCaseWords(input: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function emailToDisplayName(email: string): string {
-  const localPart = email.split("@")[0] || "NüMe User";
+function identifierToDisplayName(identifier: string | null | undefined): string {
+  const localPart = (identifier || "").split("@")[0] || "NüMe User";
   return titleCaseWords(localPart.replace(/\d+/g, " ").replace(/[.+]/g, " "));
 }
 
@@ -178,10 +178,12 @@ function groupRecipeInstructions(instructions: string): Recipe["instructions"] {
 }
 
 export function mapUserFromBackend(me: AuthMeDto, profile?: ProfileDto | null, fallbackName?: string): User {
+  const identifier = me.username || me.email;
   return {
     id: String(me.id),
     email: me.email,
-    full_name: fallbackName?.trim() || emailToDisplayName(me.email),
+    username: me.username,
+    full_name: fallbackName?.trim() || identifierToDisplayName(identifier),
     role: me.role,
     persona: normalizePersona(profile?.persona_type),
     onboarded: me.has_profile,

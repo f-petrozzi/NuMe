@@ -14,6 +14,7 @@ Product:
 - Support flows that adapt based on what is most likely to help each member next
 - A traceable multi-agent backend that produces explainable support plans instead of opaque single-shot outputs
 - An end-to-end deployment path: Cloudflare Pages frontend, FastAPI API, PostgreSQL, Docker Compose, Doppler secrets, and Cloudflare Tunnel
+- A documented migration path toward Cloudflare Containers + Supabase while preserving Clerk and FastAPI
 
 ## Why It Is Useful For Hiring Managers
 
@@ -23,6 +24,8 @@ Product:
 - Practical deployment: this project is live on a real domain with a split frontend/API architecture instead of staying local-only
 
 ## Architecture
+
+Current live deployment:
 
 ```text
 Cloudflare Pages (React/Vite frontend)
@@ -39,6 +42,22 @@ FastAPI API -> PostgreSQL
         +-> student specialist
         +-> caregiver specialist
         +-> tools / shared models
+```
+
+Recommended target deployment:
+
+```text
+Cloudflare Pages (React/Vite frontend)
+        |
+        v
+Cloudflare Worker / API route
+        |
+        v
+Cloudflare Container (FastAPI API)
+        |
+        +-> Supabase Postgres
+        +-> coordinator agent
+        +-> specialist services
 ```
 
 Core code layout:
@@ -65,7 +84,9 @@ Prereqs: Docker, Python 3.11+, Node 18+, Doppler CLI
 git clone https://github.com/f-petrozzi/NuMe.git
 cd NuMe
 doppler setup
-doppler run -- docker compose up -d
+doppler run -- docker compose up -d db
+doppler run -- docker compose run --rm api alembic upgrade head
+doppler run -- docker compose up -d api web specialist-student specialist-caregiver
 doppler run -- docker compose exec -T api python /workspace/infra/seed/seed.py
 ```
 
@@ -77,7 +98,7 @@ Local endpoints:
 Notes:
 
 - Secrets are managed through Doppler
-- On a fresh database, the API initializes tables on startup
+- On a fresh database, run Alembic before starting the API
 - The seed script provisions demo users and sample health data
 
 ## Deployment
@@ -89,10 +110,13 @@ Production is split intentionally:
 
 This repo no longer uses a NüMe-local `cloudflared` config. Tunnel routing is managed in the shared infrastructure stack.
 
+The recommended next-step architecture is documented in [`docs/deployment/cloudflare-supabase.md`](/mnt/ssd/homelab/NüMe/docs/deployment/cloudflare-supabase.md).
+
 ## Selected Docs
 
 - `docs/api-contracts.md` - request/response shapes
 - `docs/architecture.md` - system design notes
+- `docs/deployment/cloudflare-supabase.md` - staged Cloudflare + Supabase rollout plan
 - `docs/tech-stack.md` - implementation choices
 - `docs/setup/backend.md` - backend setup details
 - `docs/setup/frontend.md` - frontend setup details

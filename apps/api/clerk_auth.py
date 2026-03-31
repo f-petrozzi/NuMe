@@ -84,6 +84,14 @@ def _extract_email_from_claims(claims: dict[str, Any]) -> str | None:
     return None
 
 
+def _extract_username_from_claims(claims: dict[str, Any]) -> str | None:
+    for key in ("username", "preferred_username"):
+        value = claims.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 def _extract_name_from_claims(claims: dict[str, Any]) -> str | None:
     for key in ("fullName", "full_name", "name"):
         value = claims.get(key)
@@ -96,7 +104,7 @@ async def _fetch_clerk_user(clerk_user_id: str) -> dict[str, Any]:
     if not settings.clerk_secret_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Backend cannot provision first-time Clerk users without CLERK_SECRET_KEY or a custom email claim",
+            detail="Backend cannot provision first-time Clerk users without CLERK_SECRET_KEY or a custom email/username claim",
         )
 
     headers = {
@@ -143,41 +151,81 @@ async def _fetch_clerk_user(clerk_user_id: str) -> dict[str, Any]:
             primary_email = item.get("email_address")
 
     return {
-        "email": (primary_email or "").lower(),
+        "email": (primary_email or "").lower() or None,
+        "username": data.get("username") or None,
         "full_name": " ".join(part for part in [data.get("first_name"), data.get("last_name")] if part).strip(),
     }
 
 
 async def get_or_create_clerk_user(claims: dict[str, Any], db: AsyncSession) -> User:
     clerk_user_id = str(claims["sub"])
+    email = _extract_email_from_claims(claims)
+    username = _extract_username_from_claims(claims)
 
     result = await db.execute(select(User).where(User.clerk_user_id == clerk_user_id))
     user = result.scalar_one_or_none()
     if user is not None:
+        updated = False
+        if email and user.email != email:
+            user.email = email
+            updated = True
+        if username and user.username != username:
+            user.username = username
+            updated = True
+        if updated:
+            await db.commit()
+            await db.refresh(user)
         return user
 
-    email = _extract_email_from_claims(claims)
     full_name = _extract_name_from_claims(claims)
-    if not email:
+    if not email and not username:
         profile = await _fetch_clerk_user(clerk_user_id)
         email = profile["email"]
+        username = profile["username"]
         full_name = full_name or profile.get("full_name") or ""
 
-    if not email:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unable to resolve Clerk user email")
+    if not email and not username:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unable to resolve Clerk user identity")
 
-    existing_result = await db.execute(select(User).where(User.email == email))
-    existing_user = existing_result.scalar_one_or_none()
+    existing_by_email = None
+    if email:
+        existing_result = await db.execute(select(User).where(User.email == email))
+        existing_by_email = existing_result.scalar_one_or_none()
+
+    existing_by_username = None
+    if username:
+        existing_result = await db.execute(select(User).where(User.username == username))
+        existing_by_username = existing_result.scalar_one_or_none()
+
+    if (
+        existing_by_email is not None
+        and existing_by_username is not None
+        and existing_by_email.id != existing_by_username.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Username is already linked to a different Clerk user",
+        )
+
+    existing_user = existing_by_email or existing_by_username
     if existing_user is not None:
         if existing_user.clerk_user_id and existing_user.clerk_user_id != clerk_user_id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email is already linked to a different Clerk user")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Identity is already linked to a different Clerk user",
+            )
         existing_user.clerk_user_id = clerk_user_id
+        if email:
+            existing_user.email = email
+        if username:
+            existing_user.username = username
         await db.commit()
         await db.refresh(existing_user)
         return existing_user
 
     user = User(
         clerk_user_id=clerk_user_id,
+        username=username,
         email=email,
         role="member",
     )

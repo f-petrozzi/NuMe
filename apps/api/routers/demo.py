@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth import DEMO_PRIVILEGED_EMAILS, get_real_user
+from auth import can_use_demo, get_real_user
 from database import get_db
 from models.user import User
 
@@ -43,7 +43,7 @@ async def list_demo_users(
     db: AsyncSession = Depends(get_db),
 ):
     """List available demo accounts. Only accessible to internal privileged accounts."""
-    if user.email not in DEMO_PRIVILEGED_EMAILS:
+    if not can_use_demo(user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for demo access")
 
     result = await db.execute(select(User).where(User.email.in_(DEMO_USER_EMAILS)))

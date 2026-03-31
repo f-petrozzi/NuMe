@@ -42,8 +42,8 @@ const AuthContext = createContext<AuthContextValue>({
 
 export const useAuth = () => useContext(AuthContext);
 
-function inferNameFromEmail(email: string): string {
-  const local = email.split("@")[0] || "NüMe User";
+function inferNameFromIdentifier(identifier: string): string {
+  const local = identifier.split("@")[0] || "NüMe User";
   return local
     .replace(/[._+]/g, " ")
     .replace(/\s+/g, " ")
@@ -74,14 +74,18 @@ function describeAuthSyncError(error: unknown): string {
 }
 
 function mapClerkUser(user: ClerkUser): User {
-  const email = user.primaryEmailAddress?.emailAddress || user.emailAddresses[0]?.emailAddress || "";
+  const email = user.primaryEmailAddress?.emailAddress || user.emailAddresses[0]?.emailAddress || null;
+  const username = user.username || null;
+  const identifier = username || email || "NüMe User";
   const rawPersona = readMetadata(user, "persona_type");
   const rawOnboarded = readMetadata(user, "onboarded");
 
   return {
     id: user.id,
+    username,
     email,
-    full_name: user.fullName || [user.firstName, user.lastName].filter(Boolean).join(" ") || inferNameFromEmail(email),
+    full_name:
+      user.fullName || [user.firstName, user.lastName].filter(Boolean).join(" ") || inferNameFromIdentifier(identifier),
     role: "member",
     persona: typeof rawPersona === "string" ? (rawPersona as User["persona"]) : undefined,
     onboarded: rawOnboarded === true,

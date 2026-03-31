@@ -15,6 +15,7 @@ async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(
     return UserOut(
         id=user.id,
         email=user.email,
+        username=user.username,
         role=user.role,
         has_profile=user.profile is not None,
     )

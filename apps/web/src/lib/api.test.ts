@@ -174,7 +174,9 @@ describe("refreshSessionUser", () => {
   it("keeps the signed-in user when profile enrichment fails", async () => {
     const getSpy = vi.spyOn(apiClient, "get");
     getSpy
-      .mockResolvedValueOnce(mockResponse({ id: 7, email: "member@example.com", role: "member", has_profile: true }))
+      .mockResolvedValueOnce(
+        mockResponse({ id: 7, email: "member@example.com", username: null, role: "member", has_profile: true }),
+      )
       .mockRejectedValueOnce(makeAxiosError(500, "Profile query failed"));
 
     const user = await refreshSessionUser("Member Example");
@@ -182,6 +184,7 @@ describe("refreshSessionUser", () => {
     expect(user).toEqual({
       id: "7",
       email: "member@example.com",
+      username: null,
       full_name: "Member Example",
       role: "member",
       persona: undefined,
@@ -198,5 +201,26 @@ describe("refreshSessionUser", () => {
       response: { status: 401, data: { detail: "Invalid Clerk session token" } },
     });
     expect(getSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("supports username-only Clerk users", async () => {
+    const getSpy = vi.spyOn(apiClient, "get");
+    getSpy
+      .mockResolvedValueOnce(mockResponse({ id: 8, email: null, username: "wellness.member", role: "member", has_profile: false }))
+      .mockRejectedValueOnce(makeAxiosError(404, "Profile not found"));
+
+    const user = await refreshSessionUser();
+
+    expect(user).toEqual({
+      id: "8",
+      email: null,
+      username: "wellness.member",
+      full_name: "Wellness Member",
+      role: "member",
+      persona: undefined,
+      onboarded: false,
+    });
+    expect(getSpy).toHaveBeenCalledTimes(2);
+    expect(localStorage.getItem(storageKeys.user)).toBe(JSON.stringify(user));
   });
 });

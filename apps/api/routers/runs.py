@@ -43,11 +43,11 @@ class AgentMessageCreate(BaseModel):
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
 
-def _member_label(email: str | None, user_id: int) -> str:
-    if not email:
+def _member_label(identifier: str | None, user_id: int) -> str:
+    if not identifier:
         return f"Member #{user_id}"
 
-    local_part = email.split("@")[0].strip()
+    local_part = identifier.split("@")[0].strip()
     cleaned = re.sub(r"[._+-]+", " ", local_part)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned.title() or f"Member #{user_id}"
@@ -57,6 +57,7 @@ def _serialize_run(
     run: AgentRun,
     *,
     member_email: str | None,
+    member_username: str | None,
     persona_type: str | None,
     summary: str | None,
 ) -> AgentRunOut:
@@ -69,7 +70,7 @@ def _serialize_run(
             "started_at": run.started_at,
             "completed_at": run.completed_at,
             "risk_level": run.risk_level,
-            "member_label": _member_label(member_email, run.user_id),
+            "member_label": _member_label(member_email or member_username, run.user_id),
             "member_email": member_email,
             "persona_type": persona_type,
             "summary": summary.strip() if summary else None,
@@ -81,6 +82,7 @@ def _serialize_case(
     case: Case,
     *,
     member_email: str | None,
+    member_username: str | None,
     persona_type: str | None,
     summary: str | None,
 ):
@@ -92,7 +94,7 @@ def _serialize_case(
         "status": case.status,
         "created_at": case.created_at,
         "updated_at": case.updated_at,
-        "member_label": _member_label(member_email, case.user_id),
+        "member_label": _member_label(member_email or member_username, case.user_id),
         "member_email": member_email,
         "persona_type": persona_type,
         "summary": summary.strip() if summary else f"{case.risk_level.title()} risk follow-up case.",
@@ -150,7 +152,7 @@ async def list_runs(
     db: AsyncSession = Depends(get_db),
 ):
     query = (
-        select(AgentRun, User.email, UserProfile.persona_type, NormalizedEvent.summary)
+        select(AgentRun, User.email, User.username, UserProfile.persona_type, NormalizedEvent.summary)
         .join(User, User.id == AgentRun.user_id)
         .outerjoin(UserProfile, UserProfile.user_id == AgentRun.user_id)
         .outerjoin(NormalizedEvent, NormalizedEvent.id == AgentRun.normalized_event_id)
@@ -162,8 +164,14 @@ async def list_runs(
 
     result = await db.execute(query)
     return [
-        _serialize_run(run, member_email=email, persona_type=persona_type, summary=summary)
-        for run, email, persona_type, summary in result.all()
+        _serialize_run(
+            run,
+            member_email=email,
+            member_username=username,
+            persona_type=persona_type,
+            summary=summary,
+        )
+        for run, email, username, persona_type, summary in result.all()
     ]
 
 
@@ -219,7 +227,7 @@ async def get_run_trace(
     db: AsyncSession = Depends(get_db),
 ):
     run_query = (
-        select(AgentRun, User.email, UserProfile.persona_type, NormalizedEvent.summary)
+        select(AgentRun, User.email, User.username, UserProfile.persona_type, NormalizedEvent.summary)
         .join(User, User.id == AgentRun.user_id)
         .outerjoin(UserProfile, UserProfile.user_id == AgentRun.user_id)
         .outerjoin(NormalizedEvent, NormalizedEvent.id == AgentRun.normalized_event_id)
@@ -232,7 +240,7 @@ async def get_run_trace(
     row = run_result.one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Run not found")
-    run, member_email, persona_type, summary = row
+    run, member_email, member_username, persona_type, summary = row
 
     msgs_result = await db.execute(
         select(AgentMessage).where(AgentMessage.run_id == run_id).order_by(AgentMessage.created_at)
@@ -250,11 +258,23 @@ async def get_run_trace(
     case = case_result.scalar_one_or_none()
 
     return RunTraceOut(
-        run=_serialize_run(run, member_email=member_email, persona_type=persona_type, summary=summary),
+        run=_serialize_run(
+            run,
+            member_email=member_email,
+            member_username=member_username,
+            persona_type=persona_type,
+            summary=summary,
+        ),
         messages=messages,
         intervention=intervention,
         case=(
-            _serialize_case(case, member_email=member_email, persona_type=persona_type, summary=summary)
+            _serialize_case(
+                case,
+                member_email=member_email,
+                member_username=member_username,
+                persona_type=persona_type,
+                summary=summary,
+            )
             if case is not None
             else None
         ),

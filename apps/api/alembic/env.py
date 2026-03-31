@@ -23,8 +23,9 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-# Override URL from env
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Use a dedicated migration URL when provided. This should point at a direct or
+# session-pooled Postgres connection, not a transaction pooler.
+config.set_main_option("sqlalchemy.url", settings.migration_database_url)
 
 
 def run_migrations_offline() -> None:

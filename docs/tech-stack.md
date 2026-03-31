@@ -49,9 +49,9 @@ All choices are optimized for hackathon velocity: well-documented, AI-friendly, 
 | Layer | Choice | Notes |
 |---|---|---|
 | Local dev | Docker Compose | One `docker compose up` starts everything |
-| Services in Compose | `api` (FastAPI), `web` (Next.js), `db` (PostgreSQL), `specialist-student` (A2A server), `specialist-caregiver` (A2A server) | |
+| Services in Compose | `api` (FastAPI), `web` (Vite/React), `db` (PostgreSQL), `specialist-student` (A2A server), `specialist-caregiver` (A2A server) | |
 | Environment | Doppler or `.env` with Clerk, Gemini, and DB settings | |
-| Cloud target | Google Cloud Run (deployment-ready structure) | Not required for hackathon demo but directory structure should support it |
+| Cloud target | Cloudflare Pages + Cloudflare Containers + Supabase | FastAPI stays in a container; Clerk remains the auth provider |
 
 ---
 
@@ -75,3 +75,4 @@ All choices are optimized for hackathon velocity: well-documented, AI-friendly, 
 | Next.js | App is a Vite/React SPA; Next.js was planned but never adopted |
 | NextAuth / Auth0 | Clerk is already the chosen auth provider for the product |
 | Prisma | SQLAlchemy is already in Python backend; no need for a second ORM |
+| Workers rewrite (now) | Current FastAPI + SQLAlchemy + asyncpg runtime is a better fit for Cloudflare Containers than an immediate Workers rewrite |

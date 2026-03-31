@@ -43,7 +43,8 @@ file is required for direct route loads on Cloudflare Pages.
 - Set `VITE_USE_MOCK_API=true` only when you intentionally want mock API data without exercising backend auth.
 - The FastAPI backend now accepts Clerk session tokens and no longer exposes password login/register routes.
 - First-time Clerk users are synced into the local `users` table automatically.
-- For first-time user provisioning, either set `CLERK_SECRET_KEY` on the backend or add an email claim to the Clerk session token.
+- For first-time user provisioning, either set `CLERK_SECRET_KEY` on the backend or add an email or username claim to the Clerk session token.
+- Username-only Clerk sign-up is supported as long as the Clerk instance enables usernames and makes email optional.
 - To preserve seeded roles such as admin, sign into Clerk with the same email as the existing seeded user row.
 
 ## Backend secrets

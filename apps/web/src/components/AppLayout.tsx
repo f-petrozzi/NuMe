@@ -38,6 +38,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const userIdentifier = user?.email || user?.username || null;
 
   const links =
     user?.role === "admin"
@@ -81,7 +82,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <DemoSwitcher />
           <div className="px-3 py-2">
             <p className="text-sm font-medium text-sidebar-accent-foreground truncate">{user?.full_name}</p>
-            <p className="text-xs text-sidebar-foreground/60 truncate">{user?.email}</p>
+            {userIdentifier ? <p className="text-xs text-sidebar-foreground/60 truncate">{userIdentifier}</p> : null}
           </div>
           <button
             onClick={handleLogout}

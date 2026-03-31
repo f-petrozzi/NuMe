@@ -13,9 +13,9 @@ from datetime import timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from database import engine
-from models import Base
 from settings import settings
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -24,10 +24,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create tables if they don't exist (Alembic handles production migrations)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database tables ready")
+    logger.info("Starting Nume API (env=%s)", settings.app_env)
 
     # Initialize Garmin client if enabled
     if settings.garmin_enabled:
@@ -68,7 +65,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict in production
+    allow_origins=settings.allowed_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -107,6 +104,14 @@ app.include_router(demo_router)
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "nume-api"}
+
+
+@app.get("/readyz")
+async def readiness_check():
+    async with engine.connect() as conn:
+        await conn.execute(text("SELECT 1"))
+
+    return {"status": "ok", "service": "nume-api", "database": "ok"}
 
 
 @app.get("/")

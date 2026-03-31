@@ -73,7 +73,7 @@ CLERK_SECRET_KEY=
 
 Notes:
 
-- `CLERK_SECRET_KEY` is needed for first-time local user provisioning unless your Clerk session token includes an email claim.
+- `CLERK_SECRET_KEY` is needed for first-time local user provisioning unless your Clerk session token includes an email or username claim.
 - Set `VITE_USE_MOCK_API=true` only when you explicitly want mock API data without exercising backend auth.
 
 ---

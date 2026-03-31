@@ -26,7 +26,8 @@ export type AgentType = "local" | "a2a" | "parallel" | "loop";
 
 export interface User {
   id: string;
-  email: string;
+  email: string | null;
+  username?: string | null;
   full_name: string;
   role: UserRole;
   persona?: PersonaType;

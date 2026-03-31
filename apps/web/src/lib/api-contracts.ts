@@ -2,7 +2,8 @@ import type { PersonaType, RunStatus, RiskLevel, SignalType } from "@/lib/types"
 
 export interface AuthMeDto {
   id: number;
-  email: string;
+  email: string | null;
+  username: string | null;
   role: "member" | "coordinator" | "admin";
   has_profile: boolean;
 }

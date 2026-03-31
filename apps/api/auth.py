@@ -16,6 +16,10 @@ STAFF_ROLES = {"coordinator", "admin"}
 DEMO_PRIVILEGED_EMAILS: frozenset[str] = frozenset({"petrozzi.fabrizio@gmail.com", "337401@gmail.com"})
 
 
+def can_use_demo(user: User) -> bool:
+    return bool(user.email and user.email in DEMO_PRIVILEGED_EMAILS)
+
+
 async def get_real_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     session_cookie: Optional[str] = Cookie(default=None, alias="__session"),
@@ -42,7 +46,7 @@ async def get_current_user(
     claims = verify_clerk_session_token(token)
     real_user = await get_or_create_clerk_user(claims, db)
 
-    if x_demo_as and real_user.email in DEMO_PRIVILEGED_EMAILS:
+    if x_demo_as and can_use_demo(real_user):
         result = await db.execute(select(User).where(User.email == x_demo_as))
         demo_user = result.scalar_one_or_none()
         if demo_user is None:
