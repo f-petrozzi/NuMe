@@ -59,23 +59,22 @@ function QuotaCard({ quota }: { quota: DailyQuotaDto }) {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.05 }}
-      className="px-4 py-3 rounded-xl border border-border bg-card flex flex-col gap-2"
+      className="px-4 py-3 rounded-xl border border-border bg-card flex flex-col gap-2.5"
     >
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 min-w-0">
           <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
-          <span className="text-xs font-medium text-muted-foreground truncate">
-            Demo capacity · {Math.round(globalPct * 100)}% used
-          </span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs font-semibold text-foreground leading-none">Global demo capacity</span>
+            <span className="text-xs text-muted-foreground">{Math.round(globalPct * 100)}% of daily budget used · resets {resetTime}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="text-xs text-muted-foreground">
-            Your runs: <span className="font-medium text-foreground">{userRunsUsed}/{userRunsLimit}</span>
-          </span>
-          <span className="text-xs text-muted-foreground">resets {resetTime}</span>
+        <div className="shrink-0 text-right">
+          <span className="text-xs font-semibold text-foreground leading-none block">Your runs today</span>
+          <span className="text-xs text-muted-foreground">{userRunsUsed} of {userRunsLimit} used</span>
         </div>
       </div>
-      <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
         <motion.div
           className={`h-full rounded-full ${barColor}`}
           initial={{ width: 0 }}
