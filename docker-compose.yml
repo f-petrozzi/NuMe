@@ -21,7 +21,7 @@ services:
       - "${NUME_BIND_IP:-127.0.0.1}:8000:8000"
     environment:
       APP_ENV: ${APP_ENV:-development}
-      DATABASE_URL: postgresql+asyncpg://nume:nume@db:5432/nume
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://nume:nume@db:5432/nume}
       DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:-postgresql+asyncpg://nume:nume@db:5432/nume}
       DATABASE_POOL_MODE: ${DATABASE_POOL_MODE:-auto}
       DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
