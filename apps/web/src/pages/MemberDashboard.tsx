@@ -2,8 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { getDailyQuota, getRecentSignals, getRuns, getSupportPlan } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
-import { UtensilsCrossed, Footprints, Sparkles, TrendingDown, TrendingUp, Moon, Brain, Heart as HeartIcon, Activity, Zap, ZapOff } from "lucide-react";
+import { UtensilsCrossed, Footprints, Sparkles, TrendingDown, TrendingUp, Moon, Brain, Heart as HeartIcon, Activity, Zap, ZapOff, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DailyQuotaDto } from "@/lib/api-contracts";
 import type { RiskLevel } from "@/lib/types";
 
@@ -65,7 +66,19 @@ function QuotaCard({ quota }: { quota: DailyQuotaDto }) {
         <div className="flex items-center gap-2 min-w-0">
           <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
           <div className="flex flex-col min-w-0">
-            <span className="text-xs font-semibold text-foreground leading-none">Global demo capacity</span>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex items-center gap-1 w-fit cursor-default">
+                    <span className="text-xs font-semibold text-foreground leading-none">Global demo capacity</span>
+                    <Info className="h-3 w-3 text-muted-foreground/60" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-48 text-xs">
+                  Shared across all users. Your personal run count is tracked separately.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <span className="text-xs text-muted-foreground">{Math.round(globalPct * 100)}% of daily budget used · resets {resetTime}</span>
           </div>
         </div>
