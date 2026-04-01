@@ -36,7 +36,14 @@ def _default_profile(persona_type: str, user_id: int = 0) -> Dict[str, Any]:
     }
 
 
-def _fallback_user_id(*, api_base_url: str, auth_header: str, demo_as: str = "") -> int:
+def _fallback_user_id(
+    *,
+    api_base_url: str,
+    auth_header: str,
+    demo_as: str = "",
+    internal_api_token: str = "",
+    acting_user_id: int | None = None,
+) -> int:
     try:
         me = api_request(
             method="GET",
@@ -44,6 +51,8 @@ def _fallback_user_id(*, api_base_url: str, auth_header: str, demo_as: str = "")
             api_base_url=api_base_url,
             auth_header=auth_header,
             demo_as=demo_as,
+            internal_api_token=internal_api_token,
+            acting_user_id=acting_user_id,
         )
     except RuntimeError:
         return 0
@@ -59,6 +68,8 @@ def get_user_profile(
     api_base_url: str,
     auth_header: str,
     demo_as: str = "",
+    internal_api_token: str = "",
+    acting_user_id: int | None = None,
     fallback_persona: str = "student",
 ) -> Dict[str, Any]:
     try:
@@ -68,13 +79,21 @@ def get_user_profile(
             api_base_url=api_base_url,
             auth_header=auth_header,
             demo_as=demo_as,
+            internal_api_token=internal_api_token,
+            acting_user_id=acting_user_id,
         )
     except RuntimeError:
         # User has no profile (e.g. admin or coordinator accounts).
         # Return a synthetic profile so the coordinator pipeline can proceed.
         return _default_profile(
             fallback_persona,
-            user_id=_fallback_user_id(api_base_url=api_base_url, auth_header=auth_header, demo_as=demo_as),
+            user_id=_fallback_user_id(
+                api_base_url=api_base_url,
+                auth_header=auth_header,
+                demo_as=demo_as,
+                internal_api_token=internal_api_token,
+                acting_user_id=acting_user_id,
+            ),
         )
 
     try:
@@ -84,6 +103,8 @@ def get_user_profile(
             api_base_url=api_base_url,
             auth_header=auth_header,
             demo_as=demo_as,
+            internal_api_token=internal_api_token,
+            acting_user_id=acting_user_id,
         )
         profile["accessibility"] = accessibility
     except RuntimeError:

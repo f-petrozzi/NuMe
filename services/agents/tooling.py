@@ -47,6 +47,8 @@ class ToolProvider:
     api_base_url: str = "http://localhost:8000"
     auth_header: str = ""
     demo_as: str = ""
+    internal_api_token: str = ""
+    acting_user_id: int | None = None
 
     def get_user_profile(self, persona_type: str = "student") -> Dict[str, Any]:
         if not self.use_stubs:
@@ -55,6 +57,8 @@ class ToolProvider:
                 api_base_url=self.api_base_url,
                 auth_header=self.auth_header,
                 demo_as=self.demo_as,
+                internal_api_token=self.internal_api_token,
+                acting_user_id=self.acting_user_id,
                 fallback_persona=persona_type,
             )
         return get_user_profile_stub(persona_type=persona_type)
@@ -66,6 +70,8 @@ class ToolProvider:
                 api_base_url=self.api_base_url,
                 auth_header=self.auth_header,
                 demo_as=self.demo_as,
+                internal_api_token=self.internal_api_token,
+                acting_user_id=self.acting_user_id,
             )
         return get_recent_signals_stub(scenario=scenario)
 
@@ -77,6 +83,8 @@ class ToolProvider:
                 api_base_url=self.api_base_url,
                 auth_header=self.auth_header,
                 demo_as=self.demo_as,
+                internal_api_token=self.internal_api_token,
+                acting_user_id=self.acting_user_id,
             )
         return get_resources_stub(persona)
 
@@ -87,6 +95,8 @@ class ToolProvider:
                 api_base_url=self.api_base_url,
                 auth_header=self.auth_header,
                 demo_as=self.demo_as,
+                internal_api_token=self.internal_api_token,
+                acting_user_id=self.acting_user_id,
                 **payload,
             )
         return {"id": 1, **payload, "status": "open"}
@@ -98,6 +108,8 @@ class ToolProvider:
                 api_base_url=self.api_base_url,
                 auth_header=self.auth_header,
                 demo_as=self.demo_as,
+                internal_api_token=self.internal_api_token,
+                acting_user_id=self.acting_user_id,
                 **payload,
             )
         return {"id": 1, **payload}
@@ -109,6 +121,8 @@ class ToolProvider:
                 api_base_url=self.api_base_url,
                 auth_header=self.auth_header,
                 demo_as=self.demo_as,
+                internal_api_token=self.internal_api_token,
+                acting_user_id=self.acting_user_id,
                 **payload,
             )
         return {"id": 1, **payload, "status": "queued"}
@@ -120,6 +134,8 @@ class ToolProvider:
                 api_base_url=self.api_base_url,
                 auth_header=self.auth_header,
                 demo_as=self.demo_as,
+                internal_api_token=self.internal_api_token,
+                acting_user_id=self.acting_user_id,
                 **payload,
             )
         return {"id": 1, **payload}
@@ -131,6 +147,8 @@ class ToolProvider:
                 api_base_url=self.api_base_url,
                 auth_header=self.auth_header,
                 demo_as=self.demo_as,
+                internal_api_token=self.internal_api_token,
+                acting_user_id=self.acting_user_id,
                 **payload,
             )
         return {"id": payload.get("run_id", 0), **payload}
@@ -144,6 +162,8 @@ class ToolProvider:
                 api_base_url=self.api_base_url,
                 auth_header=self.auth_header,
                 demo_as=self.demo_as,
+                internal_api_token=self.internal_api_token,
+                acting_user_id=self.acting_user_id,
                 **payload,
             )
         return {"id": payload.get("run_id", 0), **payload}

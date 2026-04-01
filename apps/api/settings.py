@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     clerk_frontend_api_url: str = ""
     clerk_jwks_url: str = ""
     clerk_authorized_parties: str = ""
+    internal_api_token: str = ""
 
     # Azure OpenAI / OpenAI-compatible endpoint
     azure_openai_api_key: str = ""

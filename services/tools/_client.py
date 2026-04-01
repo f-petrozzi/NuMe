@@ -5,6 +5,28 @@ from typing import Any, Dict, Optional
 import httpx
 
 
+def _request_headers(
+    *,
+    auth_header: str,
+    demo_as: str,
+    internal_api_token: str,
+    acting_user_id: int | None,
+) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    if internal_api_token:
+        if acting_user_id is None:
+            raise ValueError("acting_user_id is required when internal_api_token is configured")
+        headers["X-Internal-Api-Key"] = internal_api_token
+        headers["X-Internal-User-Id"] = str(acting_user_id)
+        return headers
+
+    if auth_header:
+        headers["Authorization"] = auth_header
+    if demo_as:
+        headers["X-Demo-As"] = demo_as
+    return headers
+
+
 def api_request(
     *,
     method: str,
@@ -12,12 +34,17 @@ def api_request(
     api_base_url: str,
     auth_header: str,
     demo_as: str = "",
+    internal_api_token: str = "",
+    acting_user_id: int | None = None,
     json_payload: Optional[Dict[str, Any]] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> Any:
-    headers = {"Authorization": auth_header} if auth_header else {}
-    if demo_as:
-        headers["X-Demo-As"] = demo_as
+    headers = _request_headers(
+        auth_header=auth_header,
+        demo_as=demo_as,
+        internal_api_token=internal_api_token,
+        acting_user_id=acting_user_id,
+    )
     url = f"{api_base_url.rstrip('/')}{path}"
     last_exc: Exception | None = None
 

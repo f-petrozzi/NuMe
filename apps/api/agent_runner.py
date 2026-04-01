@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 import sys
 
+from settings import settings as api_settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -119,11 +121,16 @@ def run_coordinator_for_run(
         from tooling import ToolProvider
 
         settings = load_settings()
+        if not api_settings.internal_api_token:
+            raise RuntimeError("INTERNAL_API_TOKEN must be configured for coordinator tool calls")
+
         tool_provider = ToolProvider(
             use_stubs=False,
             api_base_url=api_base_url,
             auth_header=auth_header,
             demo_as=demo_as,
+            internal_api_token=api_settings.internal_api_token,
+            acting_user_id=user_id,
         )
 
         tool_provider.update_run({"run_id": run_id, "status": "running"})
