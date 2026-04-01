@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { getRecentSignals, getRuns, getSupportPlan } from "@/lib/api";
+import { getDailyQuota, getRecentSignals, getRuns, getSupportPlan } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
-import { UtensilsCrossed, Footprints, Sparkles, TrendingDown, TrendingUp, Moon, Brain, Heart as HeartIcon, Activity } from "lucide-react";
+import { UtensilsCrossed, Footprints, Sparkles, TrendingDown, TrendingUp, Moon, Brain, Heart as HeartIcon, Activity, Zap, ZapOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import type { DailyQuotaDto } from "@/lib/api-contracts";
 import type { RiskLevel } from "@/lib/types";
 
 const riskConfig: Record<RiskLevel, { label: string; className: string }> = {
@@ -26,8 +27,73 @@ const signalIcons: Record<string, React.ElementType> = {
 const cardIcons = [UtensilsCrossed, Activity, Sparkles];
 const cardLabels = ["Meal", "Activity", "Wellness"];
 
+function QuotaCard({ quota }: { quota: DailyQuotaDto }) {
+  const globalPct = quota.global_units_limit > 0 ? quota.global_units_today / quota.global_units_limit : 0;
+  const userRunsUsed = Math.floor(quota.user_units_today / 5); // COST_HEAVY=5
+  const userRunsLimit = Math.floor(quota.user_units_limit / 5);
+  const resetTime = new Date(quota.reset_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const barColor =
+    globalPct >= 0.95 ? "bg-destructive" :
+    globalPct >= 0.80 ? "bg-warning" :
+    "bg-primary";
+
+  if (!quota.ai_enabled) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+        className="flex items-center gap-3 px-4 py-3 rounded-xl border border-destructive/20 bg-destructive/5"
+      >
+        <ZapOff className="h-4 w-4 text-destructive shrink-0" />
+        <p className="text-sm text-muted-foreground">
+          AI analysis is temporarily paused. Check back soon.
+        </p>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.05 }}
+      className="px-4 py-3 rounded-xl border border-border bg-card flex flex-col gap-2"
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
+          <span className="text-xs font-medium text-muted-foreground truncate">
+            Demo capacity · {Math.round(globalPct * 100)}% used
+          </span>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="text-xs text-muted-foreground">
+            Your runs: <span className="font-medium text-foreground">{userRunsUsed}/{userRunsLimit}</span>
+          </span>
+          <span className="text-xs text-muted-foreground">resets {resetTime}</span>
+        </div>
+      </div>
+      <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+        <motion.div
+          className={`h-full rounded-full ${barColor}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${Math.min(globalPct * 100, 100)}%` }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+        />
+      </div>
+    </motion.div>
+  );
+}
+
 export default function MemberDashboard() {
   const { user } = useAuth();
+  const { data: quota } = useQuery({
+    queryKey: ["dailyQuota"],
+    queryFn: getDailyQuota,
+    staleTime: 60_000,
+  });
   const { data: runs } = useQuery({
     queryKey: ["runs"],
     queryFn: getRuns,
@@ -72,6 +138,9 @@ export default function MemberDashboard() {
           {confidenceLabel}
         </Badge>
       </div>
+
+      {/* Quota bar */}
+      {quota && <QuotaCard quota={quota} />}
 
       {/* Empathy Message */}
       <motion.div

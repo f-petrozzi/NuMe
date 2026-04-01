@@ -14,12 +14,13 @@ from urllib.parse import parse_qs, unquote as _url_unquote, urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from dependencies.rate_limit import COST_LIGHT, enforce_ai_rate_limit, require_ai_enabled
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
-from database import get_db
+from database import get_db, get_rate_limit_db
 from models.agents import Intervention
 from models.recipes import MealPlanSlot, Recipe
 from models.user import User
@@ -586,10 +587,20 @@ async def parse_url(
 @router.post("/parse-text", response_model=ParsedRecipe)
 async def parse_text(
     body: RecipeParseTextRequest,
+    request: Request,
+    _ai_gate: None = Depends(require_ai_enabled),
     user: User = Depends(get_current_user),
+    rate_limit_db: AsyncSession = Depends(get_rate_limit_db),
 ):
     if not body.text.strip():
         raise HTTPException(400, "text is empty")
+
+    await enforce_ai_rate_limit(
+        request=request,
+        user=user,
+        db=rate_limit_db,
+        cost_units=COST_LIGHT,
+    )
 
     try:
         prompt = (

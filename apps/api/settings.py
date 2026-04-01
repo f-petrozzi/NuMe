@@ -56,6 +56,21 @@ class Settings(BaseSettings):
     garmin_sync_interval_min: int = 45
     garmin_sync_days_back: int = 30
 
+    # AI endpoint controls
+    ai_endpoints_enabled: bool = True  # Hard stop: False = all AI endpoints return 503
+
+    # Rate limiting
+    # Units = estimated AI model invocations per admitted request.
+    # COST_HEAVY ≈ 5 (full coordinator pipeline, ~4-8 model calls).
+    # COST_LIGHT = 1 (single synchronous model call).
+    # cost_units must be < all limit values (misconfiguration will fail at startup assertions).
+    rate_limit_enabled: bool = True
+    rate_limit_trusted_proxy_ips: str = "127.0.0.1,::1,172.16.0.0/12"  # Trusted proxy IPs or CIDRs
+    rate_limit_global_daily_units: int = 500   # ~100 HEAVY ops/day ≈ $0.56/day max
+    rate_limit_user_daily_units: int = 50      # ~10 HEAVY ops/day per user
+    rate_limit_user_hourly_units: int = 15     # ~3 HEAVY ops/hour per user
+    rate_limit_ip_daily_units: int = 100       # ~20 HEAVY ops/day per IP (skipped for private IPs)
+
     @property
     def allowed_cors_origins(self) -> list[str]:
         return [origin.strip().rstrip("/") for origin in self.cors_allowed_origins.split(",") if origin.strip()]

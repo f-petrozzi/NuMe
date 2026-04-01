@@ -85,6 +85,7 @@ from routers.recipes import router as recipes_router
 from routers.scenarios import router as scenarios_router
 from routers.audit import router as audit_router
 from routers.demo import router as demo_router
+from routers.quota import router as quota_router
 
 app.include_router(auth_router)
 app.include_router(profile_router)
@@ -99,6 +100,7 @@ app.include_router(recipes_router)
 app.include_router(scenarios_router)
 app.include_router(audit_router)
 app.include_router(demo_router)
+app.include_router(quota_router)
 
 
 @app.get("/health")

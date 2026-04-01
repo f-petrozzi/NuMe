@@ -61,3 +61,15 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=As
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         yield session
+
+
+async def get_rate_limit_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Separate session source for rate-limit accounting.
+
+    The auth path already touches the main request session. Keeping limiter
+    writes on their own session avoids nested transaction failures and makes the
+    accounting transaction independent from request-scoped ORM work.
+    """
+    async with AsyncSessionLocal() as session:
+        yield session

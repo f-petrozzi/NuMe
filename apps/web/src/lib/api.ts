@@ -7,6 +7,7 @@ import type {
   CalorieLogDto,
   CheckInSubmission,
   DailyMetricsDto,
+  DailyQuotaDto,
   GarminAuthStatusDto,
   HealthOverviewDto,
   InterventionDto,
@@ -593,6 +594,35 @@ export async function getSleepHistory(days = 30): Promise<SleepSessionDto[]> {
 
 export async function getActivities(limit = 20): Promise<ActivityDto[]> {
   return appConfig.useMockApi ? getActivitiesMock(limit) : getActivitiesLive(limit);
+}
+
+// ---------------------------------------------------------------------------
+// Daily quota
+// ---------------------------------------------------------------------------
+
+async function getDailyQuotaLive(): Promise<DailyQuotaDto> {
+  const { data } = await apiClient.get<DailyQuotaDto>("/api/quota/daily");
+  return data;
+}
+
+async function getDailyQuotaMock(): Promise<DailyQuotaDto> {
+  await delay(150);
+  const tomorrow = new Date();
+  tomorrow.setUTCHours(24, 0, 0, 0);
+  return {
+    global_units_today: 23,
+    global_units_limit: 500,
+    user_units_today: 10,
+    user_units_limit: 50,
+    user_units_this_hour: 5,
+    user_hourly_limit: 15,
+    reset_at: tomorrow.toISOString(),
+    ai_enabled: true,
+  };
+}
+
+export async function getDailyQuota(): Promise<DailyQuotaDto> {
+  return appConfig.useMockApi ? getDailyQuotaMock() : getDailyQuotaLive();
 }
 
 // ---------------------------------------------------------------------------

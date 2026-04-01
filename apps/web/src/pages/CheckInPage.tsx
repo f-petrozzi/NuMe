@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { submitCheckIn } from "@/lib/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getDailyQuota, submitCheckIn } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
-import { ClipboardCheck, Loader2, ArrowRight, Frown, Meh, Smile } from "lucide-react";
+import { ClipboardCheck, Loader2, ArrowRight, Frown, Meh, Smile, ZapOff, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function CheckInPage() {
@@ -14,18 +14,46 @@ export default function CheckInPage() {
   const [sleep, setSleep] = useState(7);
   const [stress, setStress] = useState(30);
   const [note, setNote] = useState("");
+  const [hourlyError, setHourlyError] = useState<string | null>(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
+
+  const { data: quota } = useQuery({
+    queryKey: ["dailyQuota"],
+    queryFn: getDailyQuota,
+    staleTime: 60_000,
+  });
+
+  const userRunsUsed = quota ? Math.floor(quota.user_units_today / 5) : 0;
+  const userRunsLimit = quota ? Math.floor(quota.user_units_limit / 5) : 10;
+  const atDailyLimit = quota ? quota.user_units_today >= quota.user_units_limit : false;
+  const aiDisabled = quota ? !quota.ai_enabled : false;
+  const isBlocked = atDailyLimit || aiDisabled;
 
   const submit = useMutation({
     mutationFn: submitCheckIn,
     onSuccess: async () => {
+      setHourlyError(null);
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["runs"] }),
         qc.invalidateQueries({ queryKey: ["supportPlan"] }),
         qc.invalidateQueries({ queryKey: ["signals"] }),
+        qc.invalidateQueries({ queryKey: ["dailyQuota"] }),
       ]);
       navigate("/dashboard");
+    },
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      if (typeof detail === "object" && detail !== null) {
+        const d = detail as Record<string, unknown>;
+        if (d.limit_type === "user_hourly") {
+          const secs = typeof d.retry_after_seconds === "number" ? d.retry_after_seconds : 0;
+          const mins = Math.ceil(secs / 60);
+          setHourlyError(`You've reached your hourly limit. Try again in ~${mins} min.`);
+          return;
+        }
+      }
+      // Other errors handled by the global 429 interceptor in api-client.ts
     },
   });
 
@@ -87,9 +115,36 @@ export default function CheckInPage() {
           />
         </div>
 
+        {aiDisabled && (
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-destructive/20 bg-destructive/5 text-sm text-muted-foreground">
+            <ZapOff className="h-4 w-4 text-destructive shrink-0" />
+            AI analysis is temporarily paused. Check back soon.
+          </div>
+        )}
+
+        {!aiDisabled && atDailyLimit && (
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-warning/20 bg-warning/5 text-sm text-muted-foreground">
+            <AlertCircle className="h-4 w-4 text-warning shrink-0" />
+            You've used all {userRunsLimit} check-ins for today. Resets at midnight UTC.
+          </div>
+        )}
+
+        {hourlyError && (
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-warning/20 bg-warning/5 text-sm text-muted-foreground">
+            <AlertCircle className="h-4 w-4 text-warning shrink-0" />
+            {hourlyError}
+          </div>
+        )}
+
+        {quota && !isBlocked && (
+          <p className="text-xs text-muted-foreground text-center">
+            {userRunsUsed}/{userRunsLimit} check-ins used today
+          </p>
+        )}
+
         <Button
-          onClick={() => submit.mutate({ mood, sleep_hours: sleep, stress, note })}
-          disabled={submit.isPending}
+          onClick={() => { setHourlyError(null); submit.mutate({ mood, sleep_hours: sleep, stress, note }); }}
+          disabled={submit.isPending || isBlocked}
           className="w-full"
           size="lg"
         >

@@ -35,7 +35,7 @@ import sqlalchemy.dialects.postgresql as _pg
 _pg.JSONB = _JSON  # type: ignore[assignment]
 
 from main import app
-from database import get_db
+from database import get_db, get_rate_limit_db
 from auth import get_current_user
 from models import Base, User
 
@@ -87,10 +87,18 @@ async def client(db: AsyncSession):
     async def _override_db():
         yield db
 
+    assert db.bind is not None
+    rate_limit_factory = async_sessionmaker(db.bind, class_=AsyncSession, expire_on_commit=False)
+
+    async def _override_rate_limit_db():
+        async with rate_limit_factory() as session:
+            yield session
+
     def _override_user():
         return member
 
     app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[get_rate_limit_db] = _override_rate_limit_db
     app.dependency_overrides[get_current_user] = _override_user
 
     with patch("agent_runner.run_coordinator_for_run"):
@@ -111,10 +119,18 @@ async def admin_client(db: AsyncSession):
     async def _override_db():
         yield db
 
+    assert db.bind is not None
+    rate_limit_factory = async_sessionmaker(db.bind, class_=AsyncSession, expire_on_commit=False)
+
+    async def _override_rate_limit_db():
+        async with rate_limit_factory() as session:
+            yield session
+
     def _override_user():
         return admin
 
     app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[get_rate_limit_db] = _override_rate_limit_db
     app.dependency_overrides[get_current_user] = _override_user
 
     with patch("agent_runner.run_coordinator_for_run"):
@@ -135,10 +151,18 @@ async def coordinator_client(db: AsyncSession):
     async def _override_db():
         yield db
 
+    assert db.bind is not None
+    rate_limit_factory = async_sessionmaker(db.bind, class_=AsyncSession, expire_on_commit=False)
+
+    async def _override_rate_limit_db():
+        async with rate_limit_factory() as session:
+            yield session
+
     def _override_user():
         return coordinator
 
     app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[get_rate_limit_db] = _override_rate_limit_db
     app.dependency_overrides[get_current_user] = _override_user
 
     with patch("agent_runner.run_coordinator_for_run"):

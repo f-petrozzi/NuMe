@@ -16,7 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_runner import run_coordinator_for_run
 from auth import get_current_user
-from database import get_db
+from database import get_db, get_rate_limit_db
+from dependencies.rate_limit import COST_HEAVY, enforce_ai_rate_limit, require_ai_enabled
 from models.agents import AgentRun
 from models.events import BehaviorEvent, NormalizedEvent, WearableEvent
 from models.user import User
@@ -113,8 +114,10 @@ async def checkin(
     body: CheckInRequest,
     background_tasks: BackgroundTasks,
     request: Request,
+    _ai_gate: None = Depends(require_ai_enabled),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    rate_limit_db: AsyncSession = Depends(get_rate_limit_db),
 ):
     """
     Atomic check-in: create raw wearable events, normalize them into a bundle,
@@ -134,6 +137,13 @@ async def checkin(
     ]
     if body.note.strip():
         raw_events.append({"signal_type": "check_in_note", "value": body.note.strip(), "unit": ""})
+
+    await enforce_ai_rate_limit(
+        request=request,
+        user=user,
+        db=rate_limit_db,
+        cost_units=COST_HEAVY,
+    )
 
     for sig in raw_events:
         event = WearableEvent(

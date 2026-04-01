@@ -7,12 +7,13 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
-from database import get_db
+from database import get_db, get_rate_limit_db
+from dependencies.rate_limit import COST_LIGHT, enforce_ai_rate_limit, require_ai_enabled
 from garmin_sync import (
     _cache_get,
     _cache_set,
@@ -318,9 +319,24 @@ async def delete_calorie_log(
 @router.post("/calorie-log/ai-estimate", response_model=CalorieEstimateOut)
 async def ai_calorie_estimate(
     body: CalorieEstimateRequest,
+    request: Request,
+    _ai_gate: None = Depends(require_ai_enabled),
     user: User = Depends(get_current_user),
+    rate_limit_db: AsyncSession = Depends(get_rate_limit_db),
 ):
     """Use Azure OpenAI to estimate calories for a food item."""
+    if not body.food_name.strip():
+        raise HTTPException(400, "food_name is empty")
+    if not body.quantity.strip():
+        raise HTTPException(400, "quantity is empty")
+
+    await enforce_ai_rate_limit(
+        request=request,
+        user=user,
+        db=rate_limit_db,
+        cost_units=COST_LIGHT,
+    )
+
     try:
         prompt = (
             f"Estimate the calories in: {body.food_name}, quantity: {body.quantity}. "

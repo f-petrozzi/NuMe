@@ -17,7 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user, is_admin
 from agent_runner import run_coordinator_for_run
-from database import get_db
+from dependencies.rate_limit import COST_HEAVY, enforce_ai_rate_limit, require_ai_enabled
+from database import get_db, get_rate_limit_db
 from models.agents import AgentMessage, AgentRun, Case, Intervention
 from models.events import NormalizedEvent
 from models.user import User, UserProfile
@@ -106,8 +107,10 @@ async def trigger_run(
     body: TriggerRunRequest,
     background_tasks: BackgroundTasks,
     request: Request,
+    _ai_gate: None = Depends(require_ai_enabled),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    rate_limit_db: AsyncSession = Depends(get_rate_limit_db),
 ):
     if body.normalized_event_id is None:
         raise HTTPException(
@@ -125,6 +128,13 @@ async def trigger_run(
     )
     if not ne_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Normalized event not found")
+
+    await enforce_ai_rate_limit(
+        request=request,
+        user=user,
+        db=rate_limit_db,
+        cost_units=COST_HEAVY,
+    )
 
     run = AgentRun(
         user_id=user.id,

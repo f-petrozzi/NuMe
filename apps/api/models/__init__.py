@@ -9,6 +9,7 @@ from models.health import (
     HealthSleepSession,
     HealthSyncRun,
 )
+from models.rate_limit import AIRateCounter
 from models.recipes import MealPlanSlot, Recipe
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "WearableEvent", "BehaviorEvent", "NormalizedEvent",
     "AgentRun", "AgentMessage", "Case", "Intervention", "Notification", "Resource", "AuditLog",
     "HealthDailyMetrics", "HealthSleepSession", "HealthActivity", "HealthSyncRun", "HealthCalorieLog",
+    "AIRateCounter",
     "Recipe", "MealPlanSlot",
 ]

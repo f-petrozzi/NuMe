@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
 from agent_runner import run_coordinator_for_run
-from database import get_db
+from dependencies.rate_limit import COST_HEAVY, enforce_ai_rate_limit, require_ai_enabled
+from database import get_db, get_rate_limit_db
 from models.events import NormalizedEvent, WearableEvent
 from models.agents import AgentRun
 from models.user import User
@@ -82,12 +83,21 @@ async def run_scenario(
     scenario_id: str,
     background_tasks: BackgroundTasks,
     request: Request,
+    _ai_gate: None = Depends(require_ai_enabled),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    rate_limit_db: AsyncSession = Depends(get_rate_limit_db),
 ):
     bundle = _SIGNAL_BUNDLES.get(scenario_id)
     if not bundle:
         raise HTTPException(404, f"Unknown scenario: {scenario_id}")
+
+    await enforce_ai_rate_limit(
+        request=request,
+        user=user,
+        db=rate_limit_db,
+        cost_units=COST_HEAVY,
+    )
 
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)

@@ -1,5 +1,16 @@
 import type { PersonaType, RunStatus, RiskLevel, SignalType } from "@/lib/types";
 
+export interface DailyQuotaDto {
+  global_units_today: number;
+  global_units_limit: number;
+  user_units_today: number;
+  user_units_limit: number;
+  user_units_this_hour: number;
+  user_hourly_limit: number;
+  reset_at: string; // ISO-8601 UTC
+  ai_enabled: boolean;
+}
+
 export interface AuthMeDto {
   id: number;
   email: string | null;
