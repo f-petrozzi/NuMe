@@ -169,23 +169,37 @@ export default function MemberDashboard() {
         </div>
       ) : null}
 
-      {/* Signal Chips */}
-      {signals && (
-        <div className="flex flex-wrap gap-3">
-          {signals.map((s) => {
-            const Icon = signalIcons[s.signal_type] || Activity;
-            return (
-              <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border shadow-sm">
-                <Icon className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium capitalize">{s.signal_type.replace(/_/g, " ")}</span>
-                <span className="text-sm text-muted-foreground">
-                  {s.value} {s.unit === "scale_1_10" ? "/10" : s.unit}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* Signal Grid */}
+      {signals && signals.length > 0 && (() => {
+        const byType = signals.reduce<Record<string, typeof signals[0]>>((acc, s) => {
+          if (!acc[s.signal_type] || s.recorded_at > acc[s.signal_type].recorded_at) acc[s.signal_type] = s;
+          return acc;
+        }, {});
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {Object.values(byType).map((s, i) => {
+              const Icon = signalIcons[s.signal_type] || Activity;
+              const unit = s.unit === "scale_1_10" ? "/10" : s.unit;
+              return (
+                <motion.div
+                  key={s.signal_type}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.04 + i * 0.05 }}
+                  className="flex flex-col gap-2 p-3.5 rounded-xl bg-card border border-border hover:border-primary/30 transition-colors"
+                >
+                  <Icon className="h-3.5 w-3.5 text-primary" />
+                  <div className="flex items-baseline gap-1 leading-none">
+                    <span className="text-xl font-bold tabular-nums text-foreground">{s.value}</span>
+                    <span className="text-xs text-muted-foreground">{unit}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground capitalize">{s.signal_type.replace(/_/g, " ")}</span>
+                </motion.div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Intervention Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
