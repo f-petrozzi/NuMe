@@ -8,14 +8,27 @@ ADK_AVAILABLE = False
 IMPORT_ERROR: Optional[Exception] = None
 
 try:
-    from google.adk.agents import LlmAgent, LoopAgent, ParallelAgent, SequentialAgent
+    from google.adk.agents import BaseAgent, LlmAgent, LoopAgent, ParallelAgent, SequentialAgent
     try:
         from google.adk.agents import RemoteA2aAgent
     except ImportError:
-        from google.adk.remote import RemoteA2aAgent  # type: ignore
+        try:
+            from google.adk.remote import RemoteA2aAgent  # type: ignore
+        except ImportError:
+            @dataclass
+            class RemoteA2aAgent:
+                name: str
+                endpoint: str
+                description: str = ""
+                invoke: Optional[Callable[[dict], dict]] = None
     ADK_AVAILABLE = True
 except Exception as exc:  # pragma: no cover - exercised in local fallback
     IMPORT_ERROR = exc
+
+    @dataclass
+    class BaseAgent:
+        name: str
+        description: str = ""
 
     @dataclass
     class LlmAgent:

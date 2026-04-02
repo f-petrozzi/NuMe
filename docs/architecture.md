@@ -225,5 +225,5 @@ Frontend polls /api/runs/:id → displays trace + plan
 1. **Agents are not the system of record.** Agents interpret, recommend, and trigger. FastAPI services persist and enforce policy.
 2. **Every sensitive action is policy-gated.** Case creation, notifications, and escalation check consent and risk thresholds via tool logic.
 3. **Traceability is first-class.** Every agent message is persisted. The trace UI is a core deliverable, not an afterthought.
-4. **ADK-aligned structure.** Code is organized around `ParallelAgent`, `LoopAgent`, and `RemoteA2aAgent` naming and structure. Current execution uses a custom Python orchestrator (`execute_parallel` via `ThreadPoolExecutor`, direct Gemini API via `GeminiJsonClient`, HTTP `httpx` for A2A). `adk_compat.py` bridges to real Google ADK when the SDK is installed — real ADK runtime is a planned upgrade.
+4. **Real ADK local runtime.** Local execution now runs through Google ADK `SequentialAgent`, `ParallelAgent`, `LlmAgent`, and `LoopAgent` primitives. Remaining custom code is glue for state initialization, structured fallback handling, trace persistence, and the existing HTTP specialist boundary. `adk_compat.py` is now a narrow compatibility shim rather than the active orchestrator.
 5. **Demo-first scope.** Every architectural decision is validated against: "can this be demonstrated in 30 seconds to a judge?"

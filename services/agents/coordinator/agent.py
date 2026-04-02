@@ -6,11 +6,23 @@ import httpx
 from typing import Any, Dict, List
 
 try:
+    from google.adk.events.event import Event
+except Exception:  # pragma: no cover - google-adk is optional in some environments
+    Event = Any  # type: ignore[assignment]
+
+try:
     from services.agents.adk_compat import ParallelAgent, RemoteA2aAgent, SequentialAgent
     from services.agents.config import Settings
     from services.agents.llm_utils import OpenAIJsonClient, build_json_prompt
     from services.agents.prompts import CARE_COORDINATOR_PROMPT
-    from services.agents.runtime import AgentType, TraceRecorder, execute_parallel
+    from services.agents.runtime import (
+        AgentType,
+        TraceRecorder,
+        adk_runtime_enabled,
+        build_adk_model,
+        execute_parallel,
+        run_in_memory_agent,
+    )
     from services.agents.schemas import FinalPlan, SpecialistResult
     from services.agents.tooling import ToolProvider
 
@@ -24,7 +36,14 @@ except ImportError:
     from config import Settings
     from llm_utils import OpenAIJsonClient, build_json_prompt
     from prompts import CARE_COORDINATOR_PROMPT
-    from runtime import AgentType, TraceRecorder, execute_parallel
+    from runtime import (
+        AgentType,
+        TraceRecorder,
+        adk_runtime_enabled,
+        build_adk_model,
+        execute_parallel,
+        run_in_memory_agent,
+    )
     from schemas import FinalPlan, SpecialistResult
     from tooling import ToolProvider
 
@@ -39,11 +58,17 @@ class CareCoordinatorPipeline:
     def __init__(self, settings: Settings, tool_provider: ToolProvider) -> None:
         self.settings = settings
         self.tool_provider = tool_provider
-        self.signal_agent = SignalInterpretationAgent()
-        self.risk_agent = RiskStratificationAgent()
-        self.intervention_agent = InterventionPlanningAgent()
-        self.empathy_agent = EmpathyCheckinAgent()
-        self.validation_loop = ValidationLoopAgent()
+        self.use_adk_runtime = adk_runtime_enabled()
+        preferred_model = settings.openai_model or settings.azure_openai_deployment or None
+        self.model = build_adk_model(preferred_model)
+        self.signal_agent = SignalInterpretationAgent(model=self.model)
+        self.risk_agent = RiskStratificationAgent(model=self.model)
+        self.intervention_agent = InterventionPlanningAgent(model=self.model)
+        self.empathy_agent = EmpathyCheckinAgent(model=self.model)
+        self.validation_loop = ValidationLoopAgent(model=self.model)
+        parallel_kwargs = {}
+        if self.use_adk_runtime:
+            parallel_kwargs["after_agent_callback"] = self._after_parallel_phase
         self.parallel_phase = ParallelAgent(
             name="CareCoordinatorParallelPhase",
             sub_agents=[
@@ -51,6 +76,7 @@ class CareCoordinatorPipeline:
                 self.risk_agent.definition,
                 self.intervention_agent.definition,
             ],
+            **parallel_kwargs,
         )
         self.definition = SequentialAgent(
             name="CareCoordinator",
@@ -330,60 +356,20 @@ class CareCoordinatorPipeline:
                 merged[key] = deepcopy(value)
         return merged
 
-    def run(self, *, user_id: str, scenario: str, run_id: int = 1) -> Dict[str, Any]:
-        recorder = TraceRecorder(run_id=run_id, tool_provider=self.tool_provider)
-        run_user_id = int(user_id)
-        inferred_persona = "student" if scenario == "stressed_student" else (
-            "caregiver" if scenario == "exhausted_caregiver" else "older_adult"
-        )
-        profile = self.tool_provider.get_user_profile(persona_type=inferred_persona)
-        persona_type = profile.get("persona_type", inferred_persona)
-        raw_signals = self.tool_provider.get_recent_signals(scenario=scenario)
-        signals = {item["signal_type"]: item["value"] for item in raw_signals}
+    def _after_parallel_phase(self, callback_context: Any) -> None:
+        state = callback_context.state
+        persona_type = str(state.get("persona_type", "older_adult"))
+        signal_result = deepcopy(state.get("signal_interpretation", {}))
+        risk_result = deepcopy(state.get("risk_assessment", {}))
+        draft_plan = deepcopy(state.get("intervention_plan", {}))
+        state["intervention_planning_trace"] = deepcopy(draft_plan)
 
-        resources = [item["title"] for item in self.tool_provider.get_resources(persona_type)]
-        parallel_outputs = execute_parallel(
-            {
-                "signal_interpretation": lambda: self.signal_agent.run(signals=signals),
-                "risk_stratification": lambda: self.risk_agent.run(
-                    persona_type=persona_type,
-                    signals=signals,
-                ),
-                "intervention_planning": lambda: self.intervention_agent.run(
-                    persona_type=persona_type,
-                    goal=profile["goal"],
-                    dietary_style=profile["dietary_style"],
-                    allergies=profile["allergies"],
-                    resources=resources,
-                    signals=signals,
-                ),
-            }
-        )
-        for name, output in parallel_outputs.items():
-            recorder.log(
-                agent_name=name,
-                agent_type=AgentType.parallel,
-                input_payload={"user_id": user_id, "scenario": scenario},
-                output_payload=output,
-            )
-
-        signal_result = parallel_outputs["signal_interpretation"]
-        risk_result = parallel_outputs["risk_stratification"]
-        draft_plan = parallel_outputs["intervention_planning"]
-
-        specialist_agent = self._specialist_for(persona_type)
         specialist_name, specialist_agent_type, specialist_result = self._run_specialist(
             persona_type=persona_type,
-            findings=signal_result["findings"],
+            findings=signal_result.get("findings", []),
             risk=risk_result,
             draft_plan=draft_plan,
-            specialist_agent=specialist_agent,
-        )
-        recorder.log(
-            agent_name=specialist_name,
-            agent_type=specialist_agent_type,
-            input_payload={"persona_type": persona_type, "risk_level": risk_result["risk_level"]},
-            output_payload=specialist_result,
+            specialist_agent=self._specialist_for(persona_type),
         )
 
         if specialist_result["resources"]:
@@ -397,10 +383,84 @@ class CareCoordinatorPipeline:
                 + " ".join(specialist_result["intervention_adjustments"])
             ).strip()
 
-        empathy_result = self.empathy_agent.run(
-            risk_level=risk_result["risk_level"],
-            persona_type=persona_type,
-            signal_summary=signal_result["summary"],
+        state["intervention_plan"] = draft_plan
+        state["specialist_name"] = specialist_name
+        state["specialist_agent_type"] = specialist_agent_type.value
+        state["specialist_result"] = specialist_result
+
+    def _load_run_context(self, *, user_id: str, scenario: str) -> Dict[str, Any]:
+        inferred_persona = "student" if scenario == "stressed_student" else (
+            "caregiver" if scenario == "exhausted_caregiver" else "older_adult"
+        )
+        profile = self.tool_provider.get_user_profile(persona_type=inferred_persona)
+        persona_type = profile.get("persona_type", inferred_persona)
+        raw_signals = self.tool_provider.get_recent_signals(scenario=scenario)
+        signals = {item["signal_type"]: item["value"] for item in raw_signals}
+        resources = [item["title"] for item in self.tool_provider.get_resources(persona_type)]
+        return {
+            "run_user_id": int(user_id),
+            "profile": profile,
+            "persona_type": persona_type,
+            "signals": signals,
+            "resources": resources,
+            "scenario": scenario,
+        }
+
+    def _build_initial_state(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        profile = context["profile"]
+        return {
+            "persona_type": context["persona_type"],
+            "profile": deepcopy(profile),
+            "goal": profile["goal"],
+            "dietary_style": profile["dietary_style"],
+            "allergies": list(profile["allergies"]),
+            "signals": deepcopy(context["signals"]),
+            "resources": list(context["resources"]),
+            "validation_iterations": [],
+            "validation_plan_changed": False,
+        }
+
+    def _finalize_run(
+        self,
+        *,
+        user_id: str,
+        run_id: int,
+        context: Dict[str, Any],
+        signal_result: Dict[str, Any],
+        risk_result: Dict[str, Any],
+        parallel_intervention_output: Dict[str, Any],
+        draft_plan: Dict[str, Any],
+        specialist_name: str,
+        specialist_agent_type: AgentType,
+        specialist_result: Dict[str, Any],
+        empathy_result: Dict[str, Any],
+        validation_result: Dict[str, Any],
+        validation_iterations: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        recorder = TraceRecorder(run_id=run_id, tool_provider=self.tool_provider)
+        profile = context["profile"]
+        persona_type = context["persona_type"]
+        signals = context["signals"]
+        scenario = context["scenario"]
+        run_user_id = context["run_user_id"]
+
+        parallel_outputs = {
+            "signal_interpretation": signal_result,
+            "risk_stratification": risk_result,
+            "intervention_planning": parallel_intervention_output,
+        }
+        for name, output in parallel_outputs.items():
+            recorder.log(
+                agent_name=name,
+                agent_type=AgentType.parallel,
+                input_payload={"user_id": user_id, "scenario": scenario},
+                output_payload=output,
+            )
+        recorder.log(
+            agent_name=specialist_name,
+            agent_type=specialist_agent_type,
+            input_payload={"persona_type": persona_type, "risk_level": risk_result["risk_level"]},
+            output_payload=specialist_result,
         )
         recorder.log(
             agent_name="EmpathyCheckin",
@@ -411,14 +471,6 @@ class CareCoordinatorPipeline:
                 "summary": signal_result["summary"],
             },
             output_payload=empathy_result,
-        )
-
-        validation_result, validation_iterations = self.validation_loop.validate(
-            findings=signal_result["findings"],
-            risk_level=risk_result["risk_level"],
-            intervention_plan=draft_plan,
-            empathy_message=empathy_result["empathy_message"],
-            user_profile=profile,
         )
         for entry in validation_iterations:
             recorder.log(
@@ -499,3 +551,108 @@ class CareCoordinatorPipeline:
             "trace_messages": recorder.messages,
             "adk_prompt": self.prompt,
         }
+
+    def _run_adk(self, *, user_id: str, scenario: str, run_id: int) -> Dict[str, Any]:
+        context = self._load_run_context(user_id=user_id, scenario=scenario)
+        session_state, _events = run_in_memory_agent(
+            agent=self.definition,
+            app_name="NuMeCareCoordinator",
+            user_id=user_id,
+            session_id=f"run-{run_id}",
+            initial_state=self._build_initial_state(context),
+        )
+        del _events
+        return self._finalize_run(
+            user_id=user_id,
+            run_id=run_id,
+            context=context,
+            signal_result=deepcopy(session_state["signal_interpretation"]),
+            risk_result=deepcopy(session_state["risk_assessment"]),
+            parallel_intervention_output=deepcopy(
+                session_state.get("intervention_planning_trace", session_state["intervention_plan"])
+            ),
+            draft_plan=deepcopy(session_state["intervention_plan"]),
+            specialist_name=str(session_state["specialist_name"]),
+            specialist_agent_type=AgentType(str(session_state["specialist_agent_type"])),
+            specialist_result=deepcopy(session_state["specialist_result"]),
+            empathy_result=deepcopy(session_state["empathy_result"]),
+            validation_result=deepcopy(session_state["validation_result"]),
+            validation_iterations=deepcopy(session_state.get("validation_iterations", [])),
+        )
+
+    def _run_legacy(self, *, user_id: str, scenario: str, run_id: int = 1) -> Dict[str, Any]:
+        context = self._load_run_context(user_id=user_id, scenario=scenario)
+        profile = context["profile"]
+        persona_type = context["persona_type"]
+        signals = context["signals"]
+        resources = context["resources"]
+        parallel_outputs = execute_parallel(
+            {
+                "signal_interpretation": lambda: self.signal_agent.run(signals=signals),
+                "risk_stratification": lambda: self.risk_agent.run(
+                    persona_type=persona_type,
+                    signals=signals,
+                ),
+                "intervention_planning": lambda: self.intervention_agent.run(
+                    persona_type=persona_type,
+                    goal=profile["goal"],
+                    dietary_style=profile["dietary_style"],
+                    allergies=profile["allergies"],
+                    resources=resources,
+                    signals=signals,
+                ),
+            }
+        )
+        signal_result = parallel_outputs["signal_interpretation"]
+        risk_result = parallel_outputs["risk_stratification"]
+        draft_plan = parallel_outputs["intervention_planning"]
+        parallel_intervention_output = deepcopy(draft_plan)
+        specialist_name, specialist_agent_type, specialist_result = self._run_specialist(
+            persona_type=persona_type,
+            findings=signal_result["findings"],
+            risk=risk_result,
+            draft_plan=draft_plan,
+            specialist_agent=self._specialist_for(persona_type),
+        )
+        if specialist_result["resources"]:
+            draft_plan["resources"] = sorted(
+                set(draft_plan.get("resources", []) + specialist_result["resources"])
+            )
+        if specialist_result["intervention_adjustments"]:
+            draft_plan["notes"] = (
+                draft_plan.get("notes", "")
+                + " "
+                + " ".join(specialist_result["intervention_adjustments"])
+            ).strip()
+        empathy_result = self.empathy_agent.run(
+            risk_level=risk_result["risk_level"],
+            persona_type=persona_type,
+            signal_summary=signal_result["summary"],
+        )
+        validation_result, validation_iterations = self.validation_loop.validate(
+            findings=signal_result["findings"],
+            risk_level=risk_result["risk_level"],
+            intervention_plan=draft_plan,
+            empathy_message=empathy_result["empathy_message"],
+            user_profile=profile,
+        )
+        return self._finalize_run(
+            user_id=user_id,
+            run_id=run_id,
+            context=context,
+            signal_result=signal_result,
+            risk_result=risk_result,
+            parallel_intervention_output=parallel_intervention_output,
+            draft_plan=draft_plan,
+            specialist_name=specialist_name,
+            specialist_agent_type=specialist_agent_type,
+            specialist_result=specialist_result,
+            empathy_result=empathy_result,
+            validation_result=validation_result,
+            validation_iterations=validation_iterations,
+        )
+
+    def run(self, *, user_id: str, scenario: str, run_id: int = 1) -> Dict[str, Any]:
+        if self.use_adk_runtime:
+            return self._run_adk(user_id=user_id, scenario=scenario, run_id=run_id)
+        return self._run_legacy(user_id=user_id, scenario=scenario, run_id=run_id)

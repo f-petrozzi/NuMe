@@ -194,25 +194,12 @@ class OpenAIJsonClient:
                 model=config.model,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return LlmResult(payload=self._extract_json(self._extract_text(response)))
+            return LlmResult(payload=extract_json_object(self._extract_text(response)))
         except Exception as exc:
             return LlmResult(
                 payload=None,
                 error=f"openai: {type(exc).__name__}: {exc}",
             )
-
-    @staticmethod
-    def _extract_json(text: str) -> Dict[str, Any]:
-        candidate = text.strip()
-        if candidate.startswith("```"):
-            lines = candidate.splitlines()
-            if len(lines) >= 3:
-                candidate = "\n".join(lines[1:-1]).strip()
-        start = candidate.find("{")
-        end = candidate.rfind("}")
-        if start == -1 or end == -1 or end <= start:
-            raise ValueError("No JSON object found in model response.")
-        return json.loads(candidate[start : end + 1])
 
     @staticmethod
     def _extract_text(response: Any) -> str:
@@ -237,6 +224,19 @@ class OpenAIJsonClient:
 
 
 GeminiJsonClient = OpenAIJsonClient
+
+
+def extract_json_object(text: str) -> Dict[str, Any]:
+    candidate = text.strip()
+    if candidate.startswith("```"):
+        lines = candidate.splitlines()
+        if len(lines) >= 3:
+            candidate = "\n".join(lines[1:-1]).strip()
+    start = candidate.find("{")
+    end = candidate.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("No JSON object found in model response.")
+    return json.loads(candidate[start : end + 1])
 
 
 def build_json_prompt(*, instruction: str, response_schema: Dict[str, Any], payload: Dict[str, Any]) -> str:

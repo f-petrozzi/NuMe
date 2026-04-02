@@ -49,17 +49,17 @@ Source of truth for what is built, what is wired, and what remains for a complet
 
 ## Phase 4 — Agent Pipeline
 
-- `[x]` Custom multi-agent orchestrator wired and running:
-  - `execute_parallel` (ThreadPoolExecutor) for Signal Interpretation, Risk Stratification, Intervention Planning
-  - A2A specialist selection by persona type (student → StudentSupport, caregiver → CaregiverBurnout, other → local Accessibility agent)
-  - Empathy and Check-In agent
-  - Validation Loop (up to 3 iterations)
-- `[x]` `GeminiJsonClient` — direct Gemini 2.0 Flash calls with JSON output
-- `[x]` `adk_compat.py` — structural bridge; imports real Google ADK when installed, falls back to dataclass stubs
+- `[x]` Real Google ADK local runtime wired and running:
+  - `ParallelAgent` for Signal Interpretation, Risk Stratification, and Intervention Planning
+  - Specialist selection by persona type (student → StudentSupport, caregiver → CaregiverBurnout, other → local Accessibility agent)
+  - `SequentialAgent` coordinator flow including Empathy and Check-In
+  - `LoopAgent` validation and refinement (up to 3 iterations)
+- `[x]` Azure OpenAI-compatible model access preserved through ADK `LiteLlm`
+- `[x]` `adk_compat.py` reduced to a narrow compatibility shim for optional imports and local fallback stubs
 - `[x]` All agent outputs persisted to `agent_messages` via `persist_run_message_tool`
 - `[x]` Intervention, case, notification, and audit records written at end of run
 - `[~]` Remote specialists (`specialist-student`, `specialist-caregiver`) — FastAPI services exist; need to confirm they are healthy in Docker Compose and reachable by coordinator
-- `[ ]` Real Google ADK runtime installed and wired (currently falls back to custom orchestrator)
+- `[~]` Legacy custom orchestration remains only as an explicit fallback path for environments without Google ADK
 - `[ ]` Real ADK `adk api_server --a2a` for specialists (currently plain FastAPI `/invoke` endpoint)
 
 ---

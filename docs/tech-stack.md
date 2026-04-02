@@ -36,10 +36,10 @@ All choices are optimized for hackathon velocity: well-documented, AI-friendly, 
 | Layer | Choice | Notes |
 |---|---|---|
 | Agent SDK | Google ADK for Python | Required for Google challenge alignment |
-| LLM | Gemini 2.0 Flash | Via ADK's LiteLLM or Vertex AI integration |
-| Local agents | ADK-compatible `ParallelAgent`, `LoopAgent`, `SequentialAgent` | `adk_compat.py` bridges to real ADK when installed; falls back to custom orchestrator (ThreadPoolExecutor + direct Gemini calls) |
+| LLM | Azure OpenAI `gpt-4.1-mini` | Routed through ADK `LiteLlm`, preserving the current provider |
+| Local agents | Real ADK `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `LlmAgent` | Custom code is limited to state seeding, fallback parsing, trace persistence, and specialist/tool glue |
 | Remote specialists | HTTP POST to specialist FastAPI services (`/invoke`) | Student Support + Caregiver Burnout run as separate FastAPI services; `adk api_server --a2a` target when real ADK is wired |
-| A2A client | `RemoteA2aAgent` (compat) + `httpx` fallback | Coordinator calls specialists via `httpx`; struct matches ADK `RemoteA2aAgent` interface |
+| A2A client | `RemoteA2aAgent` interface + `httpx` boundary | Coordinator keeps the current specialist boundary for now; full A2A migration is deferred |
 | Tool pattern | ADK `FunctionTool` wrapping FastAPI service calls | Agents never touch the DB directly |
 
 ---
@@ -50,7 +50,7 @@ All choices are optimized for hackathon velocity: well-documented, AI-friendly, 
 |---|---|---|
 | Local dev | Docker Compose | One `docker compose up` starts everything |
 | Services in Compose | `api` (FastAPI), `web` (Vite/React), `db` (PostgreSQL), `specialist-student` (A2A server), `specialist-caregiver` (A2A server) | |
-| Environment | Doppler or `.env` with Clerk, Gemini, and DB settings | |
+| Environment | Doppler or `.env` with Clerk, Azure OpenAI/OpenAI-compatible endpoint settings, and DB settings | |
 | Cloud target | Cloudflare Pages + Cloudflare Containers + Supabase | FastAPI stays in a container; Clerk remains the auth provider |
 
 ---

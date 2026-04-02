@@ -22,8 +22,19 @@ You are NOT building any FastAPI routes or frontend.
 
 ```bash
 python 3.11+
-pip install google-adk
+cd apps/api
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
 ```
+
+The local coordinator now runs through real Google ADK primitives:
+- `SequentialAgent` for the coordinator flow
+- `ParallelAgent` for signal interpretation, risk stratification, and intervention planning
+- `LlmAgent` for each local specialist step
+- `LoopAgent` for validation and refinement
+
+Azure OpenAI remains supported through ADK's `LiteLlm` adapter, so the local runtime does not require a provider change.
 
 ---
 
@@ -35,6 +46,8 @@ Create `services/agents/.env`:
 AZURE_OPENAI_API_KEY=your-azure-openai-key
 AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com
 AZURE_OPENAI_DEPLOYMENT=gpt-4.1-mini     # deployment name used by the coordinator pipeline
+OPENAI_API_VERSION=2025-01-01-preview    # or AZURE_OPENAI_API_VERSION
+OPENAI_BASE_URL=                         # optional; use for OpenAI-compatible /openai/v1 endpoints
 API_BASE_URL=http://localhost:8000       # gets set by Fab once backend is running
 STUDENT_SPECIALIST_URL=http://localhost:8001   # Person 3's A2A server
 CAREGIVER_SPECIALIST_URL=http://localhost:8002  # Person 3's A2A server
@@ -76,6 +89,8 @@ Expected output:
 - LoopAgent running 1–3 validation iterations
 - Final intervention plan printed to stdout
 - agent_messages written to DB (once API is live)
+
+Remote specialists remain on the current HTTP boundary in this repo. The local workflow is now real ADK; the A2A migration remains a separate step.
 
 ---
 

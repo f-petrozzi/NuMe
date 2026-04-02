@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 try:
     from services.agents.adk_compat import LlmAgent
-    from services.agents.llm_utils import OpenAIJsonClient
+    from services.agents.llm_utils import (
+        DEFAULT_OPENAI_MODEL,
+        OpenAIJsonClient,
+        extract_json_object,
+    )
     from services.agents.prompts import INTERVENTION_PLANNING_PROMPT
+    from services.agents.runtime import build_stateful_llm_agent
     from services.agents.schemas import (
         ActivitySuggestion,
         InterventionDraft,
@@ -15,16 +20,23 @@ try:
     )
 except ImportError:
     from adk_compat import LlmAgent
-    from llm_utils import OpenAIJsonClient
+    from llm_utils import DEFAULT_OPENAI_MODEL, OpenAIJsonClient, extract_json_object
     from prompts import INTERVENTION_PLANNING_PROMPT
+    from runtime import build_stateful_llm_agent
     from schemas import ActivitySuggestion, InterventionDraft, MealSuggestion, WellnessAction
 
 
 class InterventionPlanningAgent:
-    def __init__(self) -> None:
-        self.definition = LlmAgent(
+    state_key = "intervention_plan"
+
+    def __init__(self, model: Any = DEFAULT_OPENAI_MODEL) -> None:
+        self.definition = build_stateful_llm_agent(
             name="InterventionPlanning",
-            instruction=INTERVENTION_PLANNING_PROMPT,
+            model=model,
+            instruction_builder=lambda state: self._build_prompt_from_state(state),
+            state_key=self.state_key,
+            parse_output=self._parse_response_text,
+            fallback_output=lambda state, error: self._fallback_from_state(state, error),
         )
         self._llm = OpenAIJsonClient()
         self._last_generation_error = ""
@@ -56,6 +68,79 @@ class InterventionPlanningAgent:
         )
         if llm_plan:
             return llm_plan
+
+        return self.fallback_result(
+            persona_type=persona_type,
+            goal=goal,
+            dietary_style=dietary_style,
+            allergies=allergies,
+            resources=resources,
+            risk_level=risk_level,
+            signals=signals,
+            generation_error=self._last_generation_error,
+        )
+
+    def _build_prompt_from_state(self, state: Mapping[str, Any]) -> str:
+        signal_result = state.get("signal_interpretation", {}) or {}
+        risk_result = state.get("risk_assessment", {}) or {}
+        resources = list(state.get("resources", []))
+        return self._build_prompt(
+            persona_type=str(state.get("persona_type", "older_adult")),
+            goal=str(state.get("goal", "")),
+            dietary_style=str(state.get("dietary_style", "")),
+            allergies=list(state.get("allergies", [])),
+            resources=resources,
+            findings=list(signal_result.get("findings", [])),
+            risk_level=str(
+                risk_result.get("risk_level")
+                or self._derive_risk_level(dict(state.get("signals", {})))
+            ),
+            signals=dict(state.get("signals", {})),
+        )
+
+    def _parse_response_text(
+        self,
+        text: str,
+        state: Mapping[str, Any],
+    ) -> Dict[str, object]:
+        return self._coerce_plan(
+            extract_json_object(text),
+            resources=list(state.get("resources", [])),
+            persona_type=str(state.get("persona_type", "older_adult")),
+        )
+
+    def _fallback_from_state(
+        self,
+        state: Mapping[str, Any],
+        generation_error: str,
+    ) -> Dict[str, object]:
+        risk_result = state.get("risk_assessment", {}) or {}
+        return self.fallback_result(
+            persona_type=str(state.get("persona_type", "older_adult")),
+            goal=str(state.get("goal", "")),
+            dietary_style=str(state.get("dietary_style", "")),
+            allergies=list(state.get("allergies", [])),
+            resources=list(state.get("resources", [])),
+            risk_level=str(
+                risk_result.get("risk_level")
+                or self._derive_risk_level(dict(state.get("signals", {})))
+            ),
+            signals=dict(state.get("signals", {})),
+            generation_error=generation_error,
+        )
+
+    def fallback_result(
+        self,
+        *,
+        persona_type: str,
+        goal: str,
+        dietary_style: str,
+        allergies: List[str],
+        resources: List[str],
+        risk_level: str,
+        signals: Dict[str, Any],
+        generation_error: str = "",
+    ) -> Dict[str, object]:
 
         low_intensity = risk_level in {"moderate", "high", "critical"}
         meal_title = "Steady Energy Bowl" if dietary_style != "none" else "Simple Nourishing Meal"
@@ -91,7 +176,7 @@ class InterventionPlanningAgent:
             activity_suggestion=activity,
             wellness_action=wellness,
             generation_mode="fallback",
-            generation_error=self._last_generation_error,
+            generation_error=generation_error,
             resources=resources,
             notes=notes,
             meal_constraints=meal_constraints,

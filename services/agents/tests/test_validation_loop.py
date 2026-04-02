@@ -88,6 +88,7 @@ def test_validation_loop_merges_partial_revised_plan_and_preserves_it_on_approva
 
 def test_coordinator_run_handles_partial_validation_patch_without_crashing(monkeypatch):
     pipeline = CareCoordinatorPipeline(Settings(), ToolProvider(use_stubs=True))
+    pipeline.use_adk_runtime = False
 
     monkeypatch.setattr(
         pipeline.tool_provider,
@@ -192,6 +193,7 @@ def test_coordinator_run_handles_partial_validation_patch_without_crashing(monke
 
 def test_coordinator_persists_artifacts_for_run_owner_not_profile_user(monkeypatch):
     pipeline = CareCoordinatorPipeline(Settings(), ToolProvider(use_stubs=True))
+    pipeline.use_adk_runtime = False
     captured: dict[str, dict] = {}
 
     monkeypatch.setattr(
@@ -305,6 +307,193 @@ def test_coordinator_persists_artifacts_for_run_owner_not_profile_user(monkeypat
     assert captured["case"]["user_id"] == 12
     assert captured["notification"]["user_id"] == 12
     assert result["intervention_record"]["user_id"] == 12
+
+
+def test_coordinator_run_uses_adk_runtime_path_when_available(monkeypatch):
+    pipeline = CareCoordinatorPipeline(Settings(), ToolProvider(use_stubs=True))
+    assert pipeline.use_adk_runtime is True
+
+    monkeypatch.setattr(
+        pipeline.tool_provider,
+        "get_user_profile",
+        lambda persona_type="student": {
+            "user_id": 12,
+            "goal": "stress_reduction",
+            "dietary_style": "balanced",
+            "allergies": [],
+            "persona_type": "student",
+            "accessibility": None,
+        },
+    )
+    monkeypatch.setattr(
+        pipeline.tool_provider,
+        "get_recent_signals",
+        lambda scenario="stressed_student": [
+            {"signal_type": "stress_level", "value": 8},
+            {"signal_type": "sleep_hours", "value": 5.5},
+        ],
+    )
+    monkeypatch.setattr(
+        pipeline.tool_provider,
+        "get_resources",
+        lambda persona: [{"title": "Campus counseling"}],
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_run_in_memory_agent(*, agent, app_name, user_id, session_id, initial_state):
+        captured["agent"] = agent
+        captured["app_name"] = app_name
+        captured["user_id"] = user_id
+        captured["session_id"] = session_id
+        captured["initial_state"] = initial_state
+        return (
+            {
+                "signal_interpretation": {
+                    "findings": [
+                        {
+                            "type": "stress",
+                            "severity": "high",
+                            "confidence": 0.9,
+                            "evidence": "check-in",
+                        }
+                    ],
+                    "summary": "High stress day.",
+                    "generation_mode": "llm",
+                    "generation_error": "",
+                },
+                "risk_assessment": {
+                    "risk_level": "moderate",
+                    "urgency": "today",
+                    "escalation_needed": False,
+                    "coordinator_review": False,
+                    "confidence": 0.8,
+                    "rationale": "Elevated stress.",
+                    "generation_mode": "llm",
+                    "generation_error": "",
+                },
+                "intervention_planning_trace": _full_plan(),
+                "intervention_plan": {
+                    **_full_plan(),
+                    "notes": "Validation updated the plan.",
+                    "activity_suggestion": {
+                        **_full_plan()["activity_suggestion"],
+                        "duration_minutes": 5,
+                    },
+                },
+                "specialist_name": "StudentSupportSpecialist",
+                "specialist_agent_type": AgentType.a2a.value,
+                "specialist_result": {
+                    "enriched_context": "",
+                    "resources": [],
+                    "intervention_adjustments": [],
+                    "generation_mode": "llm",
+                    "generation_error": "",
+                },
+                "empathy_result": {
+                    "empathy_message": "Take it one step at a time.",
+                    "generation_mode": "llm",
+                    "generation_error": "",
+                },
+                "validation_result": {
+                    "approved": True,
+                    "issues": [],
+                    "revised_plan": None,
+                    "halt": False,
+                    "generation_mode": "llm",
+                    "generation_error": "",
+                },
+                "validation_iterations": [],
+            },
+            [],
+        )
+
+    monkeypatch.setattr(
+        "services.agents.coordinator.agent.run_in_memory_agent",
+        fake_run_in_memory_agent,
+    )
+
+    result = pipeline.run(user_id="12", scenario="stressed_student", run_id=9)
+
+    assert captured["agent"] is pipeline.definition
+    assert captured["app_name"] == "NuMeCareCoordinator"
+    assert captured["user_id"] == "12"
+    assert captured["session_id"] == "run-9"
+    assert result["final_plan"]["meal_suggestion"] == "A balanced meal."
+    assert result["final_plan"]["activity_suggestion"] == "Take a short walk."
+    assert result["trace_messages"][0]["agent_type"] == AgentType.parallel.value
+
+
+def test_coordinator_adk_runtime_executes_real_graph_with_fallbacks(monkeypatch):
+    for key in (
+        "AZURE_OPENAI_API_KEY",
+        "OPENAI_API_KEY",
+        "AZURE_API_KEY",
+        "OPENAI_BASE_URL",
+        "AZURE_OPENAI_BASE_URL",
+        "AZURE_OPENAI_ENDPOINT",
+        "OPENAI_API_VERSION",
+        "AZURE_OPENAI_API_VERSION",
+        "AZURE_OPENAI_DEPLOYMENT",
+        "AZURE_OPENAI_DEPLOYMENT_NAME",
+        "AZURE_OPENAI_MODEL",
+        "OPENAI_MODEL",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    pipeline = CareCoordinatorPipeline(Settings(), ToolProvider(use_stubs=True))
+    assert pipeline.use_adk_runtime is True
+
+    monkeypatch.setattr(
+        pipeline.tool_provider,
+        "get_user_profile",
+        lambda persona_type="student": {
+            "user_id": 12,
+            "goal": "stress_reduction",
+            "dietary_style": "balanced",
+            "allergies": [],
+            "persona_type": "student",
+            "accessibility": None,
+        },
+    )
+    monkeypatch.setattr(
+        pipeline.tool_provider,
+        "get_recent_signals",
+        lambda scenario="stressed_student": [
+            {"signal_type": "stress_level", "value": 8},
+            {"signal_type": "sleep_hours", "value": 5.5},
+        ],
+    )
+    monkeypatch.setattr(
+        pipeline.tool_provider,
+        "get_resources",
+        lambda persona: [{"title": "Campus counseling"}],
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_run_specialist",
+        lambda **_kwargs: (
+            "StudentSupportSpecialist",
+            AgentType.local,
+            {
+                "enriched_context": "",
+                "resources": [],
+                "intervention_adjustments": [],
+                "generation_mode": "fallback",
+                "generation_error": "",
+            },
+        ),
+    )
+
+    result = pipeline.run(user_id="12", scenario="stressed_student", run_id=9)
+
+    assert result["signal_interpretation"]["generation_mode"] == "fallback"
+    assert result["risk_assessment"]["generation_mode"] == "fallback"
+    assert result["final_plan"]["generation_mode"] == "fallback"
+    assert result["final_plan"]["meal_suggestion"]
+    assert result["trace_messages"][0]["agent_type"] == AgentType.parallel.value
+    assert result["trace_messages"][-1]["agent_type"] == AgentType.loop.value
+    assert any(message["agent_name"] == "ValidationLoop" for message in result["trace_messages"])
 
 
 def test_run_specialist_falls_back_locally_when_remote_service_is_unavailable(monkeypatch):

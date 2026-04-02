@@ -73,7 +73,7 @@ Core code layout:
 
 - Frontend: React, TypeScript, Vite, Clerk
 - Backend: FastAPI, SQLAlchemy, PostgreSQL
-- AI layer: Google ADK-style multi-agent orchestration and specialist routing
+- AI layer: Google ADK multi-agent orchestration for local agents plus remote specialist routing
 - Infra: Docker Compose, Doppler, Cloudflare Pages, Cloudflare Tunnel
 
 ## Run Locally

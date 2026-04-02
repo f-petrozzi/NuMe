@@ -10,10 +10,12 @@ from __future__ import annotations
 from typing import AsyncGenerator
 from unittest.mock import patch
 
-import pytest_asyncio
+import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+pytest_plugins = ("pytest_asyncio.plugin",)
 
 # ---------------------------------------------------------------------------
 # The app must be imported AFTER we've set a dummy DATABASE_URL so pydantic
@@ -48,7 +50,7 @@ def _enable_wal(dbapi_conn, _):
     dbapi_conn.execute("PRAGMA foreign_keys=ON")
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 async def db() -> AsyncGenerator[AsyncSession, None]:
     engine = create_async_engine(TEST_DB_URL)
     event.listen(engine.sync_engine, "connect", _enable_wal)
@@ -76,7 +78,7 @@ async def _insert_user(db: AsyncSession, user_id: int, role: str = "member") -> 
     return u
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 async def client(db: AsyncSession):
     """HTTP client wired to the app with a seeded member user (id=1) in the DB."""
     member = await _insert_user(db, user_id=1, role="member")
@@ -110,7 +112,7 @@ async def client(db: AsyncSession):
     app.dependency_overrides.clear()
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 async def admin_client(db: AsyncSession):
     """HTTP client using an admin user (id=99, no profile in DB)."""
     admin = await _insert_user(db, user_id=99, role="admin")
@@ -142,7 +144,7 @@ async def admin_client(db: AsyncSession):
     app.dependency_overrides.clear()
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 async def coordinator_client(db: AsyncSession):
     """HTTP client using a coordinator user (id=50, no profile in DB)."""
     coordinator = await _insert_user(db, user_id=50, role="coordinator")
