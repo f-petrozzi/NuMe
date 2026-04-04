@@ -725,7 +725,15 @@ class CareCoordinatorPipeline:
                     dietary_style=profile["dietary_style"],
                     allergies=profile["allergies"],
                     resources=resources,
+                    accessibility=profile.get("accessibility") or {},
                     signals=signals,
+                    dynamic_state=context.get("dynamic_state", {}),
+                    archetype_scores=context.get("archetype_scores", {}),
+                    feature_windows=context.get("feature_windows", {}),
+                    recent_checkins=context.get("recent_checkins", []),
+                    calorie_summary=context.get("calorie_summary", {}),
+                    recipe_history=context.get("recipe_history", {}),
+                    intervention_history=context.get("intervention_history", {}),
                 ),
             }
         )

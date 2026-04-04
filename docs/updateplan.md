@@ -14,11 +14,12 @@ Current execution state as of 2026-04-04:
 - Ticket 2 is complete and verified with `scripts/verify_ticket_02_personalization_context.sh`
 - Ticket 3 is complete and verified with `scripts/verify_ticket_03_risk_normalization.sh`
 - Ticket 4 is complete and verified with `scripts/verify_ticket_04_recipe_nutrition_fields.sh`
-- Do not start Ticket 5 or later until explicitly requested
+- Ticket 5 is complete and verified with `scripts/verify_ticket_05_recipe_ranking.sh`
+- Do not start Ticket 6 or later until explicitly requested
 
 Last verified command:
 
-- `doppler run --config dev -- scripts/verify_ticket_04_recipe_nutrition_fields.sh`
+- `doppler run --config dev -- scripts/verify_ticket_05_recipe_ranking.sh`
 
 ## Goal
 

@@ -1,7 +1,15 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+import sys
 from typing import Any, Dict, List, Mapping, Optional
+
+API_ROOT = Path(__file__).resolve().parents[3] / "apps" / "api"
+if str(API_ROOT) not in sys.path:
+    sys.path.insert(0, str(API_ROOT))
+
+from recipe_ranking import build_recipe_ranking_context, derive_meal_constraints, summarize_recipe_preferences
 
 try:
     from services.agents.adk_compat import LlmAgent
@@ -49,9 +57,17 @@ class InterventionPlanningAgent:
         dietary_style: str,
         allergies: List[str],
         resources: List[str],
+        accessibility: Optional[Dict[str, Any]] = None,
         findings: Optional[List[Dict[str, Any]]] = None,
         risk_level: Optional[str] = None,
         signals: Optional[Dict[str, Any]] = None,
+        dynamic_state: Optional[Dict[str, Any]] = None,
+        archetype_scores: Optional[Dict[str, Any]] = None,
+        feature_windows: Optional[Dict[str, Any]] = None,
+        recent_checkins: Optional[List[Dict[str, Any]]] = None,
+        calorie_summary: Optional[Dict[str, Any]] = None,
+        recipe_history: Optional[Dict[str, Any]] = None,
+        intervention_history: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, object]:
         findings = findings or []
         signals = signals or {}
@@ -62,9 +78,17 @@ class InterventionPlanningAgent:
             dietary_style=dietary_style,
             allergies=allergies,
             resources=resources,
+            accessibility=accessibility or {},
             findings=findings,
             risk_level=risk_level,
             signals=signals,
+            dynamic_state=dynamic_state or {},
+            archetype_scores=archetype_scores or {},
+            feature_windows=feature_windows or {},
+            recent_checkins=recent_checkins or [],
+            calorie_summary=calorie_summary or {},
+            recipe_history=recipe_history or {},
+            intervention_history=intervention_history or {},
         )
         if llm_plan:
             return llm_plan
@@ -75,8 +99,16 @@ class InterventionPlanningAgent:
             dietary_style=dietary_style,
             allergies=allergies,
             resources=resources,
+            accessibility=accessibility or {},
             risk_level=risk_level,
             signals=signals,
+            dynamic_state=dynamic_state or {},
+            archetype_scores=archetype_scores or {},
+            feature_windows=feature_windows or {},
+            recent_checkins=recent_checkins or [],
+            calorie_summary=calorie_summary or {},
+            recipe_history=recipe_history or {},
+            intervention_history=intervention_history or {},
             generation_error=self._last_generation_error,
         )
 
@@ -90,12 +122,20 @@ class InterventionPlanningAgent:
             dietary_style=str(state.get("dietary_style", "")),
             allergies=list(state.get("allergies", [])),
             resources=resources,
+            accessibility=dict((state.get("profile", {}) or {}).get("accessibility") or {}),
             findings=list(signal_result.get("findings", [])),
             risk_level=str(
                 risk_result.get("risk_level")
                 or self._derive_risk_level(dict(state.get("signals", {})))
             ),
             signals=dict(state.get("signals", {})),
+            dynamic_state=dict(state.get("dynamic_state", {})),
+            archetype_scores=dict(state.get("archetype_scores", {})),
+            feature_windows=dict(state.get("feature_windows", {})),
+            recent_checkins=list(state.get("recent_checkins", [])),
+            calorie_summary=dict(state.get("calorie_summary", {})),
+            recipe_history=dict(state.get("recipe_history", {})),
+            intervention_history=dict(state.get("intervention_history", {})),
         )
 
     def _parse_response_text(
@@ -121,11 +161,19 @@ class InterventionPlanningAgent:
             dietary_style=str(state.get("dietary_style", "")),
             allergies=list(state.get("allergies", [])),
             resources=list(state.get("resources", [])),
+            accessibility=dict((state.get("profile", {}) or {}).get("accessibility") or {}),
             risk_level=str(
                 risk_result.get("risk_level")
                 or self._derive_risk_level(dict(state.get("signals", {})))
             ),
             signals=dict(state.get("signals", {})),
+            dynamic_state=dict(state.get("dynamic_state", {})),
+            archetype_scores=dict(state.get("archetype_scores", {})),
+            feature_windows=dict(state.get("feature_windows", {})),
+            recent_checkins=list(state.get("recent_checkins", [])),
+            calorie_summary=dict(state.get("calorie_summary", {})),
+            recipe_history=dict(state.get("recipe_history", {})),
+            intervention_history=dict(state.get("intervention_history", {})),
             generation_error=generation_error,
         )
 
@@ -137,8 +185,16 @@ class InterventionPlanningAgent:
         dietary_style: str,
         allergies: List[str],
         resources: List[str],
+        accessibility: Dict[str, Any],
         risk_level: str,
         signals: Dict[str, Any],
+        dynamic_state: Dict[str, Any],
+        archetype_scores: Dict[str, Any],
+        feature_windows: Dict[str, Any],
+        recent_checkins: List[Dict[str, Any]],
+        calorie_summary: Dict[str, Any],
+        recipe_history: Dict[str, Any],
+        intervention_history: Dict[str, Any],
         generation_error: str = "",
     ) -> Dict[str, object]:
 
@@ -166,10 +222,20 @@ class InterventionPlanningAgent:
             f"{', '.join(allergies) if allergies else 'none'}."
         )
         meal_constraints = self._derive_meal_constraints(
+            persona_type=persona_type,
+            goal=goal,
             dietary_style=dietary_style,
             allergies=allergies,
+            accessibility=accessibility,
             risk_level=risk_level,
             signals=signals,
+            dynamic_state=dynamic_state,
+            archetype_scores=archetype_scores,
+            feature_windows=feature_windows,
+            recent_checkins=recent_checkins,
+            calorie_summary=calorie_summary,
+            recipe_history=recipe_history,
+            intervention_history=intervention_history,
         )
         return InterventionDraft(
             meal_suggestion=meal,
@@ -185,30 +251,44 @@ class InterventionPlanningAgent:
     @staticmethod
     def _derive_meal_constraints(
         *,
+        persona_type: str,
+        goal: str,
         dietary_style: str,
         allergies: List[str],
+        accessibility: Dict[str, Any],
         risk_level: str,
         signals: Dict[str, Any],
+        dynamic_state: Dict[str, Any],
+        archetype_scores: Dict[str, Any],
+        feature_windows: Dict[str, Any],
+        recent_checkins: List[Dict[str, Any]],
+        calorie_summary: Dict[str, Any],
+        recipe_history: Dict[str, Any],
+        intervention_history: Dict[str, Any],
     ) -> List[str]:
-        constraints: list[str] = []
-        if dietary_style and dietary_style not in {"none", ""}:
-            constraints.append(dietary_style)
-        for allergy in allergies:
-            constraints.append(f"avoid_{allergy.lower().replace(' ', '_')}")
-        stress = float(signals.get("stress_level", 0) or 0)
-        sleep_h = float(signals.get("sleep_hours", 7) or 7)
-        steps = int(signals.get("steps", 0) or 0)
-        if risk_level in {"high", "critical"} or stress >= 7:
-            constraints.append("comforting")
-            constraints.append("low_prep")
-        if sleep_h < 6:
-            constraints.append("hydration_support")
-            constraints.append("high_protein")
-        if steps > 10000:
-            constraints.append("high_calorie")
-        elif steps < 3000 and steps > 0:
-            constraints.append("light")
-        return sorted(set(constraints))
+        carried_constraints: list[str] = []
+        if risk_level in {"high", "critical"}:
+            carried_constraints.extend(["comforting", "low_prep"])
+
+        context = build_recipe_ranking_context(
+            profile={
+                "persona_type": persona_type,
+                "goal": goal,
+                "dietary_style": dietary_style,
+                "allergies": allergies,
+                "accessibility": accessibility,
+            },
+            dynamic_state=dynamic_state,
+            archetype_scores=archetype_scores,
+            feature_windows=feature_windows,
+            recent_checkins=recent_checkins,
+            calorie_summary=calorie_summary,
+            recipe_history=recipe_history,
+            intervention_history=intervention_history,
+            signals=signals,
+            carried_constraints=carried_constraints,
+        )
+        return derive_meal_constraints(context)
 
     @staticmethod
     def _derive_risk_level(signals: Dict[str, Any]) -> str:
@@ -228,9 +308,17 @@ class InterventionPlanningAgent:
         dietary_style: str,
         allergies: List[str],
         resources: List[str],
+        accessibility: Dict[str, Any],
         findings: List[Dict[str, Any]],
         risk_level: str,
         signals: Dict[str, Any],
+        dynamic_state: Dict[str, Any],
+        archetype_scores: Dict[str, Any],
+        feature_windows: Dict[str, Any],
+        recent_checkins: List[Dict[str, Any]],
+        calorie_summary: Dict[str, Any],
+        recipe_history: Dict[str, Any],
+        intervention_history: Dict[str, Any],
     ) -> Optional[Dict[str, object]]:
         self._last_generation_error = ""
 
@@ -241,9 +329,17 @@ class InterventionPlanningAgent:
                 dietary_style=dietary_style,
                 allergies=allergies,
                 resources=resources,
+                accessibility=accessibility,
                 findings=findings,
                 risk_level=risk_level,
                 signals=signals,
+                dynamic_state=dynamic_state,
+                archetype_scores=archetype_scores,
+                feature_windows=feature_windows,
+                recent_checkins=recent_checkins,
+                calorie_summary=calorie_summary,
+                recipe_history=recipe_history,
+                intervention_history=intervention_history,
             )
             result = self._llm.generate_json(prompt)
             if not result.payload:
@@ -266,9 +362,17 @@ class InterventionPlanningAgent:
         dietary_style: str,
         allergies: List[str],
         resources: List[str],
+        accessibility: Dict[str, Any],
         findings: List[Dict[str, Any]],
         risk_level: str,
         signals: Dict[str, Any],
+        dynamic_state: Dict[str, Any],
+        archetype_scores: Dict[str, Any],
+        feature_windows: Dict[str, Any],
+        recent_checkins: List[Dict[str, Any]],
+        calorie_summary: Dict[str, Any],
+        recipe_history: Dict[str, Any],
+        intervention_history: Dict[str, Any],
     ) -> str:
         response_schema = {
             "meal_suggestion": {
@@ -292,6 +396,26 @@ class InterventionPlanningAgent:
             "resources": ["resource title"],
             "notes": "brief planning notes",
         }
+        meal_ranking_context = summarize_recipe_preferences(
+            build_recipe_ranking_context(
+                profile={
+                    "persona_type": persona_type,
+                    "goal": goal,
+                    "dietary_style": dietary_style,
+                    "allergies": allergies,
+                    "accessibility": accessibility,
+                },
+                dynamic_state=dynamic_state,
+                archetype_scores=archetype_scores,
+                feature_windows=feature_windows,
+                recent_checkins=recent_checkins,
+                calorie_summary=calorie_summary,
+                recipe_history=recipe_history,
+                intervention_history=intervention_history,
+                signals=signals,
+                carried_constraints=["comforting", "low_prep"] if risk_level in {"high", "critical"} else [],
+            )
+        )
         payload = {
             "persona_type": persona_type,
             "goal": goal,
@@ -301,12 +425,17 @@ class InterventionPlanningAgent:
             "findings": findings,
             "risk_level": risk_level,
             "signals": signals,
+            "dynamic_state": dynamic_state,
+            "archetype_scores": archetype_scores,
+            "meal_ranking_context": meal_ranking_context,
         }
         return (
             f"{INTERVENTION_PLANNING_PROMPT}\n\n"
             "Return only valid JSON with no markdown fences.\n"
             "Keep recommendations practical, safe, and specific.\n"
             "Do not recommend medical treatment or crisis claims.\n"
+            "Use meal_ranking_context as deterministic guidance for meal fit.\n"
+            "Keep meal_constraints aligned with meal_ranking_context.derived_constraints.\n"
             f"Response schema:\n{json.dumps(response_schema, indent=2)}\n\n"
             f"Input:\n{json.dumps(payload, indent=2)}"
         )

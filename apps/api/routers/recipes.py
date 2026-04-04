@@ -22,9 +22,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth import get_current_user
 from database import get_db, get_rate_limit_db
 from models.agents import Intervention
+from models.personalization import PersonalizationStateSnapshot
 from models.recipes import MealPlanSlot, Recipe
-from models.user import User
+from models.user import AccessibilityPreferences, User, UserProfile
 from openai_client import generate_text
+from recipe_ranking import build_recipe_ranking_context, rank_recipes
 from schemas.recipes import (
     MealPlanSlotIn,
     MealPlanSlotOut,
@@ -192,6 +194,74 @@ DEFAULT_TEMPLATE_RECIPES = [
 
 def _template_recipe_scope(user_id: int):
     return or_(Recipe.user_id == user_id, Recipe.user_id.is_(None))
+
+
+def _build_profile_for_recipe_ranking(
+    *,
+    user_id: int,
+    profile: UserProfile | None,
+    accessibility: AccessibilityPreferences | None,
+) -> dict[str, Any]:
+    return {
+        "user_id": user_id,
+        "goal": profile.goal if profile is not None else "",
+        "activity_level": profile.activity_level if profile is not None else "",
+        "dietary_style": profile.dietary_style if profile is not None else "",
+        "allergies": list(profile.allergies or []) if profile is not None else [],
+        "persona_type": profile.persona_type if profile is not None else "",
+        "accessibility": (
+            {
+                "simplified_language": bool(accessibility.simplified_language),
+                "large_text": bool(accessibility.large_text),
+                "low_energy_mode": bool(accessibility.low_energy_mode),
+            }
+            if accessibility is not None
+            else {}
+        ),
+    }
+
+
+async def _load_recipe_ranking_context(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    carried_constraints: list[str],
+):
+    snapshot = (
+        await db.execute(
+            select(PersonalizationStateSnapshot)
+            .where(PersonalizationStateSnapshot.user_id == user_id)
+            .order_by(PersonalizationStateSnapshot.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    if snapshot is not None:
+        inputs_summary = dict(snapshot.inputs_summary or {})
+        return build_recipe_ranking_context(
+            profile=dict(snapshot.profile_static or {}),
+            dynamic_state=dict(snapshot.dynamic_state or {}),
+            archetype_scores=dict(snapshot.archetype_scores or {}),
+            feature_windows=dict(snapshot.feature_windows or {}),
+            recent_checkins=list(inputs_summary.get("recent_checkins", []) or []),
+            calorie_summary=dict(inputs_summary.get("calorie_summary", {}) or {}),
+            recipe_history=dict(inputs_summary.get("recipe_history", {}) or {}),
+            intervention_history=dict(inputs_summary.get("intervention_history", {}) or {}),
+            carried_constraints=carried_constraints,
+        )
+
+    profile = (await db.execute(select(UserProfile).where(UserProfile.user_id == user_id))).scalar_one_or_none()
+    accessibility = (
+        await db.execute(select(AccessibilityPreferences).where(AccessibilityPreferences.user_id == user_id))
+    ).scalar_one_or_none()
+    return build_recipe_ranking_context(
+        profile=_build_profile_for_recipe_ranking(
+            user_id=user_id,
+            profile=profile,
+            accessibility=accessibility,
+        ),
+        carried_constraints=carried_constraints,
+    )
 
 
 async def _ensure_template_recipes(db: AsyncSession, *, user_id: int) -> None:
@@ -896,10 +966,9 @@ async def recommended_recipes(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Return template recipes matched against the meal_constraints from the user's
-    most recent intervention. Falls back to top template recipes if none exists.
+    Return template recipes ranked from the user's personalization snapshot plus
+    compatibility tags from the latest intervention.
     """
-    # 1. Get latest intervention's meal_constraints
     await _ensure_template_recipes(db, user_id=user.id)
 
     intervention_result = await db.execute(
@@ -911,26 +980,18 @@ async def recommended_recipes(
     intervention = intervention_result.scalar_one_or_none()
     constraints: list[str] = (intervention.meal_constraints or []) if intervention else []
 
-    # 2. Query template recipes
     base_query = select(Recipe).where(
         Recipe.is_template.is_(True),
         _template_recipe_scope(user.id),
     )
-
-    if constraints:
-        # Score by number of overlapping tags — fetch templates and filter in Python
-        # (avoids complex SQL for hackathon simplicity)
-        all_templates = (await db.execute(base_query)).scalars().all()
-        constraint_set = set(constraints)
-        scored = sorted(
-            all_templates,
-            key=lambda r: len(constraint_set.intersection(set(r.tags or []))),
-            reverse=True,
-        )
-        return scored[:limit]
-
-    result = await db.execute(base_query.order_by(Recipe.id).limit(limit))
-    return result.scalars().all()
+    all_templates = (await db.execute(base_query)).scalars().all()
+    ranking_context = await _load_recipe_ranking_context(
+        db,
+        user_id=user.id,
+        carried_constraints=constraints,
+    )
+    ranked = rank_recipes(all_templates, ranking_context, limit=limit)
+    return [item.recipe for item in ranked]
 
 
 @router.get("/{recipe_id}", response_model=RecipeOut)

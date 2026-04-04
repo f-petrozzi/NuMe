@@ -6,6 +6,8 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from models.agents import Intervention
+from models.personalization import PersonalizationStateSnapshot
 from models.recipes import Recipe
 from routers.recipes import _extract_servings
 from routers.recipes import DEFAULT_TEMPLATE_RECIPES
@@ -231,3 +233,104 @@ async def test_recommended_recipes_include_new_metadata_fields(
     assert "calories" in body[0]
     assert "protein_grams" in body[0]
     assert "equipment_tags" in body[0]
+
+
+async def test_recommended_recipes_use_snapshot_ranking_not_only_latest_intervention_constraints(
+    client: AsyncClient,
+    db: AsyncSession,
+):
+    db.add_all(
+        [
+            Recipe(
+                user_id=1,
+                is_template=True,
+                title="Constraint Match Walnut Bake",
+                description="Matches the old intervention tag but ignores low-prep and allergy context.",
+                source_url="",
+                our_way_notes="",
+                prep_minutes=18,
+                cook_minutes=22,
+                servings=1,
+                calories=640,
+                protein_grams=14.0,
+                carbs_grams=48.0,
+                fat_grams=31.0,
+                fiber_grams=5.0,
+                prep_effort="high",
+                equipment_tags=["oven"],
+                cost_level="medium",
+                tags=["comforting"],
+                ingredients=[
+                    {"name": "Walnuts", "quantity": "1/3 cup", "category": "Pantry", "section": "Top"},
+                ],
+                instructions="Bake and serve.",
+                photo_filename="",
+                created_at=datetime.now(timezone.utc),
+            ),
+            Recipe(
+                user_id=1,
+                is_template=True,
+                title="Low Prep Safe Bowl",
+                description="Aligned with the snapshot: quick, nut-safe, and higher protein.",
+                source_url="",
+                our_way_notes="",
+                prep_minutes=6,
+                cook_minutes=0,
+                servings=1,
+                calories=330,
+                protein_grams=26.0,
+                carbs_grams=27.0,
+                fat_grams=10.0,
+                fiber_grams=6.0,
+                prep_effort="low",
+                equipment_tags=["bowl"],
+                cost_level="medium",
+                tags=["low_prep", "avoid_nuts", "high_protein", "light"],
+                ingredients=[
+                    {"name": "Greek yogurt", "quantity": "1 cup", "category": "Dairy", "section": "Base"},
+                    {"name": "Blueberries", "quantity": "1/2 cup", "category": "Produce", "section": "Top"},
+                ],
+                instructions="Combine and serve.",
+                photo_filename="",
+                created_at=datetime.now(timezone.utc),
+            ),
+            Intervention(
+                user_id=1,
+                meal_suggestion="Comforting meal",
+                empathy_message="Keep it simple.",
+                meal_constraints=["comforting"],
+                created_at=datetime.now(timezone.utc),
+            ),
+            PersonalizationStateSnapshot(
+                user_id=1,
+                run_id=None,
+                source="live",
+                profile_static={
+                    "goal": "stress_reduction",
+                    "dietary_style": "balanced",
+                    "allergies": ["peanuts"],
+                    "persona_type": "student",
+                    "accessibility": {"low_energy_mode": True},
+                },
+                dynamic_state={
+                    "stress_load": 0.2,
+                    "sleep_debt": 0.1,
+                    "activity_capacity": 0.3,
+                    "prep_capacity": 0.2,
+                    "calorie_balance": 320,
+                    "protein_gap": 0.4,
+                },
+                archetype_scores={"low_energy_recovery": 0.62},
+                feature_windows={},
+                inputs_summary={},
+                created_at=datetime.now(timezone.utc),
+            ),
+        ]
+    )
+    await db.commit()
+
+    resp = await client.get("/api/recipes/recommended?limit=2")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    assert [item["title"] for item in body] == ["Low Prep Safe Bowl", "Constraint Match Walnut Bake"]
