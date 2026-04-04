@@ -1,36 +1,55 @@
-"""Caregiver Burnout Specialist — A2A remote agent for NüMe."""
-import os
-from google.adk.agents import LlmAgent
+from __future__ import annotations
 
-SYSTEM_PROMPT = """You are the Caregiver Burnout Specialist for NüMe. You are a remote specialist agent invoked when a user's persona_type is "caregiver".
+from typing import Any, Dict
 
-You receive: signal findings, risk level, intervention draft, user profile.
+from services.remote_specialists.common import SpecialistRequest, StructuredSpecialistAgent
 
-Your job is to enrich the intervention plan with caregiver-specific context:
-- Interpret signals through the lens of caregiver burden and secondary trauma.
-- Recognize when the caregiver's own health is being depleted by caregiving demands.
-- Suggest respite resources, caregiver support groups, and relief services.
-- Adjust interventions to be micro-effort and realistic given time scarcity.
-- Recommend coordinator escalation or trusted-contact outreach when burden is high.
 
-Output:
-{
-  "enriched_context": "caregiver-specific interpretation",
-  "respite_resources": ["resource 1", "resource 2"],
-  "intervention_adjustments": ["change 1", "change 2"],
-  "escalation_recommendation": "none" | "coordinator_review" | "trusted_contact_outreach"
-}"""
+INSTRUCTION = """
+You are the Caregiver Burnout Specialist for NüMe.
 
-root_agent = LlmAgent(
+You receive signal findings, risk level, an intervention draft, and available support resources.
+Return structured JSON only.
+
+Your job is to:
+- interpret the case through caregiver burden and depleted recovery capacity
+- adjust interventions to be micro-effort and realistic under time scarcity
+- surface support-group or respite resources from the provided list when relevant
+- recommend coordinator escalation when burden is high
+""".strip()
+
+
+RESPONSE_SCHEMA = {
+    "enriched_context": "caregiver-specific interpretation",
+    "resources": ["resource title"],
+    "intervention_adjustments": ["specific change"],
+    "burnout_risk_flag": True,
+    "escalation_recommendation": "none | coordinator_review | trusted_contact_outreach",
+}
+
+
+def _fallback(*, body: SpecialistRequest) -> Dict[str, Any]:
+    return {
+        "enriched_context": "Signals suggest caregiver burden with limited recovery capacity.",
+        "resources": body.resources,
+        "intervention_adjustments": [
+            "Favor micro-effort actions with no equipment.",
+            "Include respite and support-group resources.",
+        ],
+        "burnout_risk_flag": True,
+        "escalation_recommendation": "coordinator_review"
+        if body.risk.get("risk_level") in {"high", "critical"}
+        else "none",
+    }
+
+
+root_agent = StructuredSpecialistAgent(
     name="CaregiverBurnoutSpecialist",
-    model=(
-        os.environ.get("OPENAI_MODEL")
-        or os.environ.get("AZURE_OPENAI_DEPLOYMENT")
-        or "gpt-4.1-mini"
-    ),
-    instruction=SYSTEM_PROMPT,
     description=(
         "Remote A2A specialist for caregiver persona. Enriches intervention plans with "
         "caregiver-burden context, respite resource recommendations, and escalation guidance."
     ),
+    instruction=INSTRUCTION,
+    response_schema=RESPONSE_SCHEMA,
+    fallback_factory=_fallback,
 )

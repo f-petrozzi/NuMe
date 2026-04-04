@@ -94,12 +94,17 @@ Local endpoints:
 
 - Frontend: `http://localhost:8080`
 - API docs: `http://localhost:8000/docs`
+- Student specialist health: `http://localhost:8001/health`
+- Student specialist agent card: `http://localhost:8001/.well-known/agent-card.json`
+- Caregiver specialist health: `http://localhost:8002/health`
+- Caregiver specialist agent card: `http://localhost:8002/.well-known/agent-card.json`
 
 Notes:
 
 - Secrets are managed through Doppler
 - On a fresh database, run Alembic before starting the API
 - The seed script provisions demo users and sample health data
+- In Docker Compose, the coordinator resolves specialist cards through `http://specialist-student:8001` and `http://specialist-caregiver:8002`
 
 ## Deployment
 

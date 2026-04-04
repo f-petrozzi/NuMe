@@ -1,6 +1,0 @@
-{
-  "name": "CaregiverBurnoutSpecialist",
-  "description": "Caregiver burden and respite routing specialist for NüMe.",
-  "url": "http://localhost:8002/invoke",
-  "version": "0.1.0"
-}

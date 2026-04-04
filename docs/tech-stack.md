@@ -38,8 +38,8 @@ All choices are optimized for hackathon velocity: well-documented, AI-friendly, 
 | Agent SDK | Google ADK for Python | Required for Google challenge alignment |
 | LLM | Azure OpenAI `gpt-4.1-mini` | Routed through ADK `LiteLlm`, preserving the current provider |
 | Local agents | Real ADK `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `LlmAgent` | Custom code is limited to state seeding, fallback parsing, trace persistence, and specialist/tool glue |
-| Remote specialists | HTTP POST to specialist FastAPI services (`/invoke`) | Student Support + Caregiver Burnout run as separate FastAPI services; `adk api_server --a2a` target when real ADK is wired |
-| A2A client | `RemoteA2aAgent` interface + `httpx` boundary | Coordinator keeps the current specialist boundary for now; full A2A migration is deferred |
+| Remote specialists | Real Google ADK A2A services | Student Support + Caregiver Burnout expose A2A agent cards plus JSON-RPC A2A endpoints; `/invoke` remains only as an explicit temporary compatibility route |
+| A2A client | `google.adk.agents.remote_a2a_agent.RemoteA2aAgent` | Coordinator resolves each specialist card and calls the official ADK A2A client path |
 | Tool pattern | ADK `FunctionTool` wrapping FastAPI service calls | Agents never touch the DB directly |
 
 ---

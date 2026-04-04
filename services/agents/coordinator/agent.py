@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
-import httpx
+import json
 from typing import Any, Dict, List
+from uuid import uuid4
 
 try:
     from google.adk.events.event import Event
@@ -13,7 +14,7 @@ except Exception:  # pragma: no cover - google-adk is optional in some environme
 try:
     from services.agents.adk_compat import ParallelAgent, RemoteA2aAgent, SequentialAgent
     from services.agents.config import Settings
-    from services.agents.llm_utils import OpenAIJsonClient, build_json_prompt
+    from services.agents.llm_utils import OpenAIJsonClient, build_json_prompt, extract_json_object
     from services.agents.prompts import CARE_COORDINATOR_PROMPT
     from services.agents.runtime import (
         AgentType,
@@ -22,6 +23,7 @@ try:
         build_adk_model,
         execute_parallel,
         run_in_memory_agent,
+        run_text_agent,
     )
     from services.agents.schemas import FinalPlan, SpecialistResult
     from services.agents.tooling import ToolProvider
@@ -34,7 +36,7 @@ try:
 except ImportError:
     from adk_compat import ParallelAgent, RemoteA2aAgent, SequentialAgent
     from config import Settings
-    from llm_utils import OpenAIJsonClient, build_json_prompt
+    from llm_utils import OpenAIJsonClient, build_json_prompt, extract_json_object
     from prompts import CARE_COORDINATOR_PROMPT
     from runtime import (
         AgentType,
@@ -43,6 +45,7 @@ except ImportError:
         build_adk_model,
         execute_parallel,
         run_in_memory_agent,
+        run_text_agent,
     )
     from schemas import FinalPlan, SpecialistResult
     from tooling import ToolProvider
@@ -89,17 +92,21 @@ class CareCoordinatorPipeline:
         self.prompt = CARE_COORDINATOR_PROMPT
         self._llm = OpenAIJsonClient()
 
+    @staticmethod
+    def _specialist_card_url(base_url: str) -> str:
+        return f"{base_url.rstrip('/')}/.well-known/agent-card.json"
+
     def _specialist_for(self, persona_type: str) -> RemoteA2aAgent | None:
         if persona_type == "student":
             return RemoteA2aAgent(
                 name="StudentSupportSpecialist",
-                endpoint=self.settings.student_specialist_url,
+                agent_card=self._specialist_card_url(self.settings.student_specialist_url),
                 description="Student support remote specialist",
             )
         if persona_type == "caregiver":
             return RemoteA2aAgent(
                 name="CaregiverBurnoutSpecialist",
-                endpoint=self.settings.caregiver_specialist_url,
+                agent_card=self._specialist_card_url(self.settings.caregiver_specialist_url),
                 description="Caregiver support remote specialist",
             )
         return None
@@ -329,22 +336,64 @@ class CareCoordinatorPipeline:
             "draft_plan": draft_plan,
             "resources": resources,
         }
-        last_exc: Exception | None = None
-        for _ in range(2):
-            try:
-                with httpx.Client(timeout=20.0) as client:
-                    response = client.post(f"{specialist_agent.endpoint.rstrip('/')}/invoke", json=payload)
-                    response.raise_for_status()
-                    body = response.json()
-                    body.setdefault("generation_mode", "llm")
-                    body.setdefault("generation_error", "")
-                    return body
-            except httpx.HTTPError as exc:
-                last_exc = exc
-
-        raise RuntimeError(
-            f"Remote specialist call failed for {specialist_agent.name}: {last_exc}"
+        events = run_text_agent(
+            agent=specialist_agent,
+            app_name="NuMeRemoteSpecialistClient",
+            user_id="care-coordinator",
+            session_id=f"{persona_type}-{uuid4().hex}",
+            message=json.dumps(payload, sort_keys=True),
         )
+
+        response_text = ""
+        response_error = ""
+        for event in events:
+            error_message = str(getattr(event, "error_message", "") or "").strip()
+            if error_message:
+                response_error = error_message
+
+            content = getattr(event, "content", None)
+            if event.author != specialist_agent.name or not content or not content.parts:
+                continue
+
+            text_parts = [str(getattr(part, "text", "") or "").strip() for part in content.parts]
+            candidate = "\n".join([item for item in text_parts if item]).strip()
+            if candidate:
+                response_text = candidate
+
+        if not response_text:
+            raise RuntimeError(
+                f"Remote specialist call failed for {specialist_agent.name}: "
+                f"{response_error or 'Remote specialist returned no text response.'}"
+            )
+
+        try:
+            body = extract_json_object(response_text)
+            body.setdefault("generation_mode", "llm")
+            body.setdefault("generation_error", "")
+            return SpecialistResult(
+                enriched_context=str(body.get("enriched_context", "")).strip(),
+                resources=sorted(
+                    {
+                        str(item).strip()
+                        for item in body.get("resources", [])
+                        if str(item).strip()
+                    }
+                ),
+                intervention_adjustments=[
+                    str(item).strip()
+                    for item in body.get("intervention_adjustments", [])
+                    if str(item).strip()
+                ],
+                burnout_risk_flag=body.get("burnout_risk_flag"),
+                escalation_recommendation=body.get("escalation_recommendation"),
+                generation_mode=str(body.get("generation_mode", "llm")).strip() or "llm",
+                generation_error=str(body.get("generation_error", "")).strip(),
+            ).model_dump()
+        except Exception as exc:
+            raise RuntimeError(
+                f"Remote specialist returned invalid JSON payload for "
+                f"{specialist_agent.name}: {type(exc).__name__}: {exc}"
+            ) from exc
 
     @staticmethod
     def _merge_plan_patch(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:

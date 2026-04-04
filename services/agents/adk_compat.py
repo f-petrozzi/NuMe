@@ -10,15 +10,15 @@ IMPORT_ERROR: Optional[Exception] = None
 try:
     from google.adk.agents import BaseAgent, LlmAgent, LoopAgent, ParallelAgent, SequentialAgent
     try:
-        from google.adk.agents import RemoteA2aAgent
+        from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
     except ImportError:
         try:
-            from google.adk.remote import RemoteA2aAgent  # type: ignore
+            from google.adk.agents import RemoteA2aAgent  # type: ignore
         except ImportError:
             @dataclass
             class RemoteA2aAgent:
                 name: str
-                endpoint: str
+                agent_card: str
                 description: str = ""
                 invoke: Optional[Callable[[dict], dict]] = None
     ADK_AVAILABLE = True
@@ -56,6 +56,6 @@ except Exception as exc:  # pragma: no cover - exercised in local fallback
     @dataclass
     class RemoteA2aAgent:
         name: str
-        endpoint: str
+        agent_card: str
         description: str = ""
         invoke: Optional[Callable[[dict], dict]] = None

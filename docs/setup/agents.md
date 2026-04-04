@@ -90,8 +90,6 @@ Expected output:
 - Final intervention plan printed to stdout
 - agent_messages written to DB (once API is live)
 
-Remote specialists remain on the current HTTP boundary in this repo. The local workflow is now real ADK; the A2A migration remains a separate step.
-
 ---
 
 ## Key architecture rules

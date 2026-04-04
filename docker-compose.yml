@@ -70,8 +70,11 @@ services:
   specialist-student:
     image: python:3.11-slim
     working_dir: /workspace
+    ports:
+      - "${NUME_BIND_IP:-127.0.0.1}:8001:8001"
     environment:
       NUME_REPO_ROOT: /workspace
+      A2A_PUBLIC_BASE_URL: http://specialist-student:8001
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
       AZURE_API_KEY: ${AZURE_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -86,13 +89,27 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-}
     volumes:
       - ./:/workspace
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     command: sh -c "pip install --no-cache-dir -r services/remote_specialists/requirements.txt && uvicorn services.remote_specialists.student_support.app:app --host 0.0.0.0 --port 8001 --reload"
 
   specialist-caregiver:
     image: python:3.11-slim
     working_dir: /workspace
+    ports:
+      - "${NUME_BIND_IP:-127.0.0.1}:8002:8002"
     environment:
       NUME_REPO_ROOT: /workspace
+      A2A_PUBLIC_BASE_URL: http://specialist-caregiver:8002
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
       AZURE_API_KEY: ${AZURE_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -107,6 +124,17 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-}
     volumes:
       - ./:/workspace
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     command: sh -c "pip install --no-cache-dir -r services/remote_specialists/requirements.txt && uvicorn services.remote_specialists.caregiver_burnout.app:app --host 0.0.0.0 --port 8002 --reload"
 
   web:

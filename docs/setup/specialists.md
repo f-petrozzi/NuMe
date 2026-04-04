@@ -23,7 +23,7 @@ You are NOT building frontend — that's Person 4.
 
 ```bash
 python 3.11+
-pip install google-adk httpx
+apps/api/.venv/bin/pip install -r apps/api/requirements.txt
 ```
 
 ---
@@ -61,15 +61,27 @@ npx json-server --watch docs/api-contracts.json --port 8000
 
 ```bash
 # Student Support Specialist — runs on port 8001
-cd services/remote_specialists/student_support
-adk api_server --a2a --port 8001
+apps/api/.venv/bin/uvicorn services.remote_specialists.student_support.app:app --host 0.0.0.0 --port 8001
 
 # Caregiver Burnout Specialist — runs on port 8002
-cd services/remote_specialists/caregiver_burnout
-adk api_server --a2a --port 8002
+apps/api/.venv/bin/uvicorn services.remote_specialists.caregiver_burnout.app:app --host 0.0.0.0 --port 8002
 ```
 
-Each specialist needs an `agent_card.json` in its directory. The agent card tells the Care Coordinator what this specialist does and how to call it.
+The specialist apps now generate their ADK A2A agent cards dynamically. The coordinator resolves:
+
+- `http://localhost:8001/.well-known/agent-card.json`
+- `http://localhost:8002/.well-known/agent-card.json`
+
+Quick verification:
+
+```bash
+curl http://localhost:8001/health
+curl http://localhost:8001/.well-known/agent-card.json
+curl http://localhost:8002/health
+curl http://localhost:8002/.well-known/agent-card.json
+```
+
+The legacy `/invoke` route still exists temporarily for compatibility, but coordinator traffic should use the A2A card + JSON-RPC surface.
 
 ---
 

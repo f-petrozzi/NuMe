@@ -18,6 +18,7 @@ lxml==5.3.0
 recipe-scrapers==14.57.0
 openai>=1.0.0
 google-adk==1.28.0
+a2a-sdk==0.3.11
 litellm==1.83.0
 garminconnect==0.2.23
 apscheduler==3.10.4

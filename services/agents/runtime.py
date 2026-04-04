@@ -245,3 +245,32 @@ def run_in_memory_agent(
         session_id=session_id,
     )
     return copy.deepcopy(session.state), events
+
+
+def run_text_agent(
+    *,
+    agent: Any,
+    app_name: str,
+    user_id: str,
+    session_id: str,
+    message: str,
+) -> List[Any]:
+    if not adk_runtime_enabled() or genai_types is None:
+        raise RuntimeError("Google ADK runtime is not available.")
+
+    runner = InMemoryRunner(agent=agent, app_name=app_name)
+    runner.session_service.create_session_sync(
+        app_name=runner.app_name,
+        user_id=user_id,
+        session_id=session_id,
+    )
+    return list(
+        runner.run(
+            user_id=user_id,
+            session_id=session_id,
+            new_message=genai_types.Content(
+                role="user",
+                parts=[genai_types.Part(text=message)],
+            ),
+        )
+    )

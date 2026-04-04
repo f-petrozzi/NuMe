@@ -1,36 +1,55 @@
-"""Student Support Specialist — A2A remote agent for NüMe."""
-import os
-from google.adk.agents import LlmAgent
+from __future__ import annotations
 
-SYSTEM_PROMPT = """You are the Student Support Specialist for NüMe. You are a remote specialist agent invoked when a user's persona_type is "student".
+from typing import Any, Dict
 
-You receive: signal findings, risk level, intervention draft, user profile.
+from services.remote_specialists.common import SpecialistRequest, StructuredSpecialistAgent
 
-Your job is to enrich the intervention plan with student-specific context:
-- Interpret signals in the context of academic stress, exam periods, and social pressure.
-- Suggest campus-specific resources (counseling services, academic support, peer programs).
-- Adjust intervention recommendations to be realistic for a student schedule.
-- Prioritize low-effort, high-recovery suggestions.
-- Flag if academic burnout risk is present.
 
-Output:
-{
-  "enriched_context": "student-specific interpretation of the situation",
-  "campus_resources": ["resource 1", "resource 2"],
-  "intervention_adjustments": ["specific change 1", "specific change 2"],
-  "burnout_risk_flag": true | false
-}"""
+INSTRUCTION = """
+You are the Student Support Specialist for NüMe.
 
-root_agent = LlmAgent(
+You receive signal findings, risk level, an intervention draft, and available campus resources.
+Return structured JSON only.
+
+Your job is to:
+- interpret the case in the context of academic overload, exam pressure, and student recovery
+- strengthen the intervention with realistic, low-pressure student-specific adjustments
+- include campus-specific resources already provided when relevant
+- flag burnout risk when the case suggests sustained academic overload
+""".strip()
+
+
+RESPONSE_SCHEMA = {
+    "enriched_context": "student-specific interpretation",
+    "resources": ["resource title"],
+    "intervention_adjustments": ["specific change"],
+    "burnout_risk_flag": True,
+    "escalation_recommendation": "none | coordinator_review",
+}
+
+
+def _fallback(*, body: SpecialistRequest) -> Dict[str, Any]:
+    return {
+        "enriched_context": "Stress pattern aligns with academic overload and low recovery.",
+        "resources": body.resources,
+        "intervention_adjustments": [
+            "Favor low-pressure study-break framing.",
+            "Include campus counseling and academic support options.",
+        ],
+        "burnout_risk_flag": body.risk.get("risk_level") in {"moderate", "high", "critical"},
+        "escalation_recommendation": "coordinator_review"
+        if body.risk.get("risk_level") in {"high", "critical"}
+        else "none",
+    }
+
+
+root_agent = StructuredSpecialistAgent(
     name="StudentSupportSpecialist",
-    model=(
-        os.environ.get("OPENAI_MODEL")
-        or os.environ.get("AZURE_OPENAI_DEPLOYMENT")
-        or "gpt-4.1-mini"
-    ),
-    instruction=SYSTEM_PROMPT,
     description=(
         "Remote A2A specialist for students. Enriches intervention plans with "
         "academic-stress context and campus resource recommendations."
     ),
+    instruction=INSTRUCTION,
+    response_schema=RESPONSE_SCHEMA,
+    fallback_factory=_fallback,
 )
