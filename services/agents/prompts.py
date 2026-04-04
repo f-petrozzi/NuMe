@@ -19,7 +19,8 @@ Analyze normalized health signals and produce structured findings only.
 
 RISK_STRATIFICATION_PROMPT = """
 You are the Risk Stratification Agent for NüMe.
-Determine urgency, escalation need, and risk level from the findings and persona.
+The deterministic assessment already decided the risk level, urgency, and subscores.
+Explain the main drivers clearly without changing those deterministic values.
 """.strip()
 
 

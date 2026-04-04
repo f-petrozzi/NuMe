@@ -6,6 +6,20 @@ This document is the durable handoff plan for replacing the current thin, prompt
 
 If context is compacted or reset, resume from this file first.
 
+## Execution Status
+
+Current execution state as of 2026-04-04:
+
+- Ticket 1 is complete and verified with `scripts/verify_ticket_01_schema.sh`
+- Ticket 2 is complete and verified with `scripts/verify_ticket_02_personalization_context.sh`
+- Ticket 3 is complete and verified with `scripts/verify_ticket_03_risk_normalization.sh`
+- Ticket 4 is complete and verified with `scripts/verify_ticket_04_recipe_nutrition_fields.sh`
+- Do not start Ticket 5 or later until explicitly requested
+
+Last verified command:
+
+- `doppler run --config dev -- scripts/verify_ticket_04_recipe_nutrition_fields.sh`
+
 ## Goal
 
 Replace the current `profile + recent raw signals + prompt tuning` approach with:
@@ -24,6 +38,19 @@ Replace the current `profile + recent raw signals + prompt tuning` approach with
 - Keep `persona_type` for onboarding metadata, coarse routing, and resource lookup only
 - Start with interpretable scores, not unsupervised clustering
 - Build logs first, then consider ML later
+
+## Environment Assumptions
+
+- The API Python environment already exists at `apps/api/.venv`
+- Do not create a second API virtualenv unless the user explicitly requests it
+- Secrets are managed through Doppler using the `dev` config
+- Prefer verification commands and scripts that can be run with Doppler-injected env vars
+- Production deployment runs on Cloudflare, so verification scripts should not hardcode assumptions that only work in one local container layout unless the script is explicitly local-only
+- Where possible, make scripts work from env vars such as:
+  - `API_URL`
+  - `INTERNAL_API_TOKEN`
+  - `SMOKE_USER_EMAIL`
+  - any additional per-ticket settings
 
 ## Verified Current State
 
@@ -605,6 +632,56 @@ During migration:
 - extend DTOs with optional structured fields if needed
 - remove `mapInterventionToSupportPlan()` only after the dashboard cutover is complete
 
+## Ticket Verification Rule
+
+At the end of every ticket, add or update a reusable verification script under `scripts/`.
+
+Purpose:
+
+- avoid copy-pasting many commands after each ticket
+- make it easy to rerun validation after context loss
+- let the user send one script output back for confirmation
+
+Required behavior:
+
+- every ticket must leave behind a script that validates the work done in that ticket
+- if the app is expected to remain runnable end-to-end after that ticket, the script must exercise the application end-to-end, not just unit tests
+- if the ticket is an intermediate schema or plumbing step that cannot yet provide meaningful end-to-end behavior, the script must still:
+  - run the best available targeted checks
+  - print clearly what is being verified
+  - print clearly what is intentionally not yet covered
+- scripts must exit nonzero on failure
+- scripts should prefer the existing API venv at `apps/api/.venv`
+- scripts should be runnable from the repo root
+- scripts should be designed so the user can run one command and paste the output back
+
+Recommended naming:
+
+- `scripts/verify_ticket_01_schema.sh`
+- `scripts/verify_ticket_02_personalization_context.sh`
+- `scripts/verify_ticket_03_risk_normalization.sh`
+- and so on
+
+Recommended execution style:
+
+- local dev example:
+  - `doppler run --config dev -- scripts/verify_ticket_XX_<slug>.sh`
+- if Doppler env is already injected in the shell:
+  - `scripts/verify_ticket_XX_<slug>.sh`
+
+Recommended contents of each ticket script:
+
+- environment preflight
+- migration step if required
+- targeted backend tests
+- targeted frontend typecheck/test/build when relevant
+- HTTP smoke flow for the feature path changed by the ticket when the app should still work end-to-end
+
+Reuse guidance:
+
+- if a ticket naturally overlaps old smoke coverage patterns, reuse the useful parts of prior smoke logic rather than rewriting from scratch
+- the older one-off ADK/A2A smoke scripts were intentionally removed, but their ideas are still valid as templates for future ticket-specific verification scripts
+
 ## Ticket List
 
 These are the execution tickets. Follow them in order unless explicitly parallelized below.
@@ -626,11 +703,16 @@ Primary files:
 - `apps/api/schemas/agents.py`
 - `apps/api/alembic/versions/007_personalization_state_snapshots_and_structured_interventions.py`
 
+Verification script:
+
+- `scripts/verify_ticket_01_schema.sh`
+
 Acceptance criteria:
 
 - migrations apply cleanly
 - old intervention endpoints still work
 - structured fields are nullable and backward compatible
+- add a reusable verification script for this ticket
 
 ### Ticket 2: `Personalization context builder`
 
@@ -648,6 +730,10 @@ Primary files:
 - `services/agents/coordinator/agent.py`
 - optionally `services/tools/get_health_snapshot_tool.py`
 
+Verification script:
+
+- `scripts/verify_ticket_02_personalization_context.sh`
+
 Implementation notes:
 
 - snapshot builder should read the DB-backed health tables directly
@@ -661,6 +747,7 @@ Acceptance criteria:
 
 - a live run can build a snapshot and proceed
 - coordinator no longer depends only on `/api/events/recent`
+- add a reusable verification script for this ticket
 
 ### Ticket 3: `Check-in normalization and risk subscores`
 
@@ -683,6 +770,7 @@ Acceptance criteria:
 - positive or neutral check-ins do not automatically create `negative_checkin`
 - risk output includes subscores and drivers
 - existing pipeline tests are updated
+- add a reusable verification script for this ticket
 
 ### Ticket 4: `008_recipe_nutrition_fields`
 
@@ -703,6 +791,7 @@ Acceptance criteria:
 
 - existing recipe CRUD still works
 - templates and user recipes can hold the new fields
+- add a reusable verification script for this ticket
 
 ### Ticket 5: `Meal ranking service`
 
@@ -726,6 +815,7 @@ Acceptance criteria:
 
 - recommendations are generated from structured ranking
 - latest intervention `meal_constraints` is no longer the sole ranking input
+- add a reusable verification script for this ticket
 
 ### Ticket 6: `009_activity_wellness_catalogs_and_planner_rewrite`
 
@@ -749,6 +839,7 @@ Acceptance criteria:
 
 - selected activity and wellness IDs are persisted
 - planner output includes `why_chosen` and `alternatives_considered`
+- add a reusable verification script for this ticket
 
 ### Ticket 7: `Support plan endpoint and trace compatibility`
 
@@ -770,6 +861,7 @@ Acceptance criteria:
 - dashboard can fetch one structured object
 - run traces still load
 - old clients still function during transition
+- add a reusable verification script for this ticket
 
 ### Ticket 8: `Frontend support-plan cutover`
 
@@ -797,6 +889,7 @@ Acceptance criteria:
 - dashboard uses `GET /api/support-plan/current`
 - recipe page reads structured meal recommendation context
 - `mapInterventionToSupportPlan()` is deleted or fully dead code
+- add a reusable verification script for this ticket
 
 ### Ticket 9: `010_support_plan_feedback_events`
 
@@ -818,6 +911,7 @@ Acceptance criteria:
 
 - feedback events are persisted
 - recommendation interaction can be tied back to specific interventions
+- add a reusable verification script for this ticket
 
 ## Recommended Execution Order
 
@@ -895,6 +989,11 @@ Suggested cases:
 - current support-plan endpoint returns linked objects and change reasons
 - intervention persistence still fills legacy text fields
 
+Verification policy:
+
+- after each ticket, prefer running the ticket-specific script first
+- use direct test commands only as fallback or while developing the script
+
 ### Web tests
 
 Current web test coverage is minimal:
@@ -950,9 +1049,10 @@ If work resumes after context loss:
    - `apps/api/models/recipes.py`
    - `apps/web/src/lib/api.ts`
    - `apps/web/src/pages/MemberDashboard.tsx`
-3. Start with Ticket 1 unless it is already complete.
-4. Keep compatibility fields and routes until the frontend is fully migrated.
-5. Use deterministic state and ranking logic first, LLM composition second.
+3. Inspect `scripts/` and identify the latest ticket verification script.
+4. Start with Ticket 1 unless it is already complete.
+5. Keep compatibility fields and routes until the frontend is fully migrated.
+6. Use deterministic state and ranking logic first, LLM composition second.
 
 ## Definition Of Done
 

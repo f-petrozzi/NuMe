@@ -14,7 +14,18 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import AgentMessage, AgentRun, Case, Intervention, NormalizedEvent, User, UserProfile, WearableEvent
+from models import (
+    AgentMessage,
+    AgentRun,
+    Case,
+    Intervention,
+    NormalizedEvent,
+    PersonalizationStateSnapshot,
+    Recipe,
+    User,
+    UserProfile,
+    WearableEvent,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -65,12 +76,13 @@ async def test_checkin_creates_normalized_event_and_run(client: AsyncClient, db:
 
 async def test_checkin_stress_converted_to_1_10(client: AsyncClient, db: AsyncSession):
     """Frontend sends stress 0-100; backend must store it as 1-10."""
-    await client.post("/api/events/checkin", json={
+    resp = await client.post("/api/events/checkin", json={
         "mood": 5,
         "sleep_hours": 7.0,
         "stress": 80,  # 80% → 8/10
         "note": "",
     })
+    assert resp.status_code == 201, resp.text
     events = (await db.execute(
         select(WearableEvent).where(
             WearableEvent.user_id == 1,
@@ -79,6 +91,29 @@ async def test_checkin_stress_converted_to_1_10(client: AsyncClient, db: AsyncSe
     )).scalars().all()
     assert len(events) >= 1
     assert events[-1].value == "8"
+
+
+async def test_checkin_normalized_event_includes_mood_and_note_normalization(
+    client: AsyncClient, db: AsyncSession
+):
+    resp = await client.post("/api/events/checkin", json={
+        "mood": 8,
+        "sleep_hours": 7.5,
+        "stress": 20,
+        "note": "Feeling calm and rested today",
+    })
+    assert resp.status_code == 201, resp.text
+    norm_id = resp.json()["normalized_event_id"]
+
+    norm = (await db.execute(
+        select(NormalizedEvent).where(NormalizedEvent.id == norm_id)
+    )).scalar_one()
+    assert norm.signals["check_in_mood"] == "8"
+    assert norm.signals["check_in_mood_score"] == 0.778
+    assert norm.signals["check_in_valence"] == "positive"
+    assert norm.signals["stress_level"] == "2"
+    assert norm.signals["stress_level_normalized"] == 0.2
+    assert norm.signals["check_in_note_sentiment"] > 0
 
 
 async def test_checkin_without_note_omits_checkin_note_event(client: AsyncClient, db: AsyncSession):
@@ -96,6 +131,13 @@ async def test_checkin_without_note_omits_checkin_note_event(client: AsyncClient
         )
     )).scalars().all()
     assert len(events) == 0
+
+    norm = (await db.execute(
+        select(NormalizedEvent).where(NormalizedEvent.id == resp.json()["normalized_event_id"])
+    )).scalar_one()
+    assert "check_in_note" not in norm.signals
+    assert "check_in_note_sentiment" not in norm.signals
+    assert norm.signals["check_in_valence"] == "neutral"
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +293,76 @@ async def test_member_intervention_creation_uses_run_owner_for_support_plan(
 
     persisted = (await db.execute(select(Intervention).where(Intervention.id == created["id"]))).scalar_one()
     assert persisted.user_id == 1
+
+
+async def test_intervention_creation_persists_structured_metadata(
+    client: AsyncClient, db: AsyncSession
+):
+    norm = NormalizedEvent(user_id=1, signals={"stress_level": "6"}, summary="stress 6/10")
+    db.add(norm)
+    await db.flush()
+
+    run = AgentRun(user_id=1, normalized_event_id=norm.id, status="completed", risk_level="moderate")
+    db.add(run)
+    await db.flush()
+
+    snapshot = PersonalizationStateSnapshot(
+        user_id=1,
+        run_id=run.id,
+        source="live_checkin",
+        profile_static={"goal": "stress_reduction"},
+        dynamic_state={"sleep_debt": 0.4},
+        archetype_scores={"student_overload": 0.8},
+        feature_windows={"7d": {"sleep_hours_avg": 5.8}},
+        inputs_summary={"recent_checkins": 2},
+    )
+    recipe = Recipe(user_id=1, title="Protein Bowl", description="Quick lunch")
+    db.add_all([snapshot, recipe])
+    await db.commit()
+    await db.refresh(snapshot)
+    await db.refresh(recipe)
+
+    create_resp = await client.post(
+        "/api/interventions",
+        json={
+            "user_id": 1,
+            "run_id": run.id,
+            "state_snapshot_id": snapshot.id,
+            "recipe_id": recipe.id,
+            "activity_template_id": 7,
+            "wellness_template_id": 11,
+            "meal_suggestion": "Protein-forward lunch",
+            "activity_suggestion": "10-minute reset walk",
+            "wellness_action": "Two-minute grounding reset",
+            "empathy_message": "Keep the plan simple today.",
+            "meal_constraints": ["high_protein", "low_prep"],
+            "risk_subscores": {"physiological_strain": 0.71, "recovery_debt": 0.63},
+            "why_chosen": {"meal": ["Fits prep capacity", "Improves protein coverage"]},
+            "alternatives_considered": [17, 23],
+            "why_changed_from_previous": ["Recovery score fell compared with yesterday"],
+        },
+    )
+    assert create_resp.status_code == 201, create_resp.text
+    created = create_resp.json()
+    assert created["state_snapshot_id"] == snapshot.id
+    assert created["recipe_id"] == recipe.id
+    assert created["activity_template_id"] == 7
+    assert created["wellness_template_id"] == 11
+    assert created["meal_constraints"] == ["high_protein", "low_prep"]
+    assert created["risk_subscores"]["physiological_strain"] == 0.71
+    assert created["why_chosen"]["meal"] == ["Fits prep capacity", "Improves protein coverage"]
+    assert created["alternatives_considered"] == [17, 23]
+    assert created["why_changed_from_previous"] == ["Recovery score fell compared with yesterday"]
+
+    persisted = (await db.execute(select(Intervention).where(Intervention.id == created["id"]))).scalar_one()
+    assert persisted.state_snapshot_id == snapshot.id
+    assert persisted.recipe_id == recipe.id
+    assert persisted.activity_template_id == 7
+    assert persisted.wellness_template_id == 11
+    assert persisted.risk_subscores == {"physiological_strain": 0.71, "recovery_debt": 0.63}
+    assert persisted.why_chosen == {"meal": ["Fits prep capacity", "Improves protein coverage"]}
+    assert persisted.alternatives_considered == [17, 23]
+    assert persisted.why_changed_from_previous == ["Recovery score fell compared with yesterday"]
 
 
 # ---------------------------------------------------------------------------

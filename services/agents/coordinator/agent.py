@@ -494,14 +494,16 @@ class CareCoordinatorPipeline:
         state["specialist_agent_type"] = specialist_agent_type.value
         state["specialist_result"] = specialist_result
 
-    def _load_run_context(self, *, user_id: str, scenario: str) -> Dict[str, Any]:
+    def _load_run_context(self, *, user_id: str, scenario: str, run_id: int) -> Dict[str, Any]:
         inferred_persona = "student" if scenario == "stressed_student" else (
             "caregiver" if scenario == "exhausted_caregiver" else "older_adult"
         )
-        profile = self.tool_provider.get_user_profile(persona_type=inferred_persona)
-        persona_type = profile.get("persona_type", inferred_persona)
-        raw_signals = self.tool_provider.get_recent_signals(scenario=scenario)
-        signals = {item["signal_type"]: item["value"] for item in raw_signals}
+        personalization = self.tool_provider.get_personalization_context(run_id=run_id, scenario=scenario)
+        profile = deepcopy(personalization.get("profile", {})) or self.tool_provider.get_user_profile(
+            persona_type=inferred_persona
+        )
+        persona_type = str(personalization.get("persona_type") or profile.get("persona_type") or inferred_persona)
+        signals = deepcopy(personalization.get("signals", {}))
         resources = [item["title"] for item in self.tool_provider.get_resources(persona_type)]
         return {
             "run_user_id": int(user_id),
@@ -510,6 +512,15 @@ class CareCoordinatorPipeline:
             "signals": signals,
             "resources": resources,
             "scenario": scenario,
+            "state_snapshot_id": personalization.get("snapshot_id"),
+            "dynamic_state": deepcopy(personalization.get("dynamic_state", {})),
+            "archetype_scores": deepcopy(personalization.get("archetype_scores", {})),
+            "feature_windows": deepcopy(personalization.get("feature_windows", {})),
+            "recent_checkins": deepcopy(personalization.get("recent_checkins", [])),
+            "calorie_summary": deepcopy(personalization.get("calorie_summary", {})),
+            "recipe_history": deepcopy(personalization.get("recipe_history", {})),
+            "intervention_history": deepcopy(personalization.get("intervention_history", {})),
+            "normalized_event_id": personalization.get("normalized_event_id"),
         }
 
     def _build_initial_state(self, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -521,6 +532,14 @@ class CareCoordinatorPipeline:
             "dietary_style": profile["dietary_style"],
             "allergies": list(profile["allergies"]),
             "signals": deepcopy(context["signals"]),
+            "state_snapshot_id": context.get("state_snapshot_id"),
+            "dynamic_state": deepcopy(context.get("dynamic_state", {})),
+            "archetype_scores": deepcopy(context.get("archetype_scores", {})),
+            "feature_windows": deepcopy(context.get("feature_windows", {})),
+            "recent_checkins": deepcopy(context.get("recent_checkins", [])),
+            "calorie_summary": deepcopy(context.get("calorie_summary", {})),
+            "recipe_history": deepcopy(context.get("recipe_history", {})),
+            "intervention_history": deepcopy(context.get("intervention_history", {})),
             "resources": list(context["resources"]),
             "validation_iterations": [],
             "validation_plan_changed": False,
@@ -604,11 +623,13 @@ class CareCoordinatorPipeline:
         intervention_payload = {
             "user_id": run_user_id,
             "run_id": run_id,
+            "state_snapshot_id": context.get("state_snapshot_id"),
             "meal_suggestion": final_plan["meal_suggestion"],
             "activity_suggestion": final_plan["activity_suggestion"],
             "wellness_action": final_plan["wellness_action"],
             "empathy_message": final_plan["empathy_message"],
             "meal_constraints": draft_plan.get("meal_constraints", []),
+            "risk_subscores": risk_result.get("subscores"),
         }
         intervention_record = self.tool_provider.create_intervention(intervention_payload)
         case_record = None
@@ -659,7 +680,7 @@ class CareCoordinatorPipeline:
         }
 
     def _run_adk(self, *, user_id: str, scenario: str, run_id: int) -> Dict[str, Any]:
-        context = self._load_run_context(user_id=user_id, scenario=scenario)
+        context = self._load_run_context(user_id=user_id, scenario=scenario, run_id=run_id)
         session_state, _events = run_in_memory_agent(
             agent=self.definition,
             app_name="NuMeCareCoordinator",
@@ -687,17 +708,16 @@ class CareCoordinatorPipeline:
         )
 
     def _run_legacy(self, *, user_id: str, scenario: str, run_id: int = 1) -> Dict[str, Any]:
-        context = self._load_run_context(user_id=user_id, scenario=scenario)
+        context = self._load_run_context(user_id=user_id, scenario=scenario, run_id=run_id)
         profile = context["profile"]
         persona_type = context["persona_type"]
         signals = context["signals"]
         resources = context["resources"]
         parallel_outputs = execute_parallel(
             {
-                "signal_interpretation": lambda: self.signal_agent.run(signals=signals),
-                "risk_stratification": lambda: self.risk_agent.run(
-                    persona_type=persona_type,
+                "signal_interpretation": lambda: self.signal_agent.run(
                     signals=signals,
+                    recent_checkins=context.get("recent_checkins", []),
                 ),
                 "intervention_planning": lambda: self.intervention_agent.run(
                     persona_type=persona_type,
@@ -710,7 +730,14 @@ class CareCoordinatorPipeline:
             }
         )
         signal_result = parallel_outputs["signal_interpretation"]
-        risk_result = parallel_outputs["risk_stratification"]
+        risk_result = self.risk_agent.run(
+            persona_type=persona_type,
+            findings=signal_result["findings"],
+            signals=signals,
+            dynamic_state=context.get("dynamic_state", {}),
+            recent_checkins=context.get("recent_checkins", []),
+            feature_windows=context.get("feature_windows", {}),
+        )
         draft_plan = parallel_outputs["intervention_planning"]
         parallel_intervention_output = deepcopy(draft_plan)
         specialist_name, specialist_agent_type, specialist_result = self._run_specialist(

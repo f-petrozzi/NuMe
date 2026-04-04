@@ -43,6 +43,36 @@ def _full_plan() -> dict:
     }
 
 
+def _stub_personalization_context(*, profile_user_id: int = 12, persona_type: str = "student") -> dict:
+    return {
+        "snapshot_id": 101,
+        "user_id": profile_user_id,
+        "run_id": 9,
+        "scenario": "stressed_student",
+        "persona_type": persona_type,
+        "profile": {
+            "user_id": profile_user_id,
+            "goal": "stress_reduction",
+            "dietary_style": "balanced",
+            "allergies": [],
+            "persona_type": persona_type,
+            "accessibility": None,
+        },
+        "dynamic_state": {},
+        "archetype_scores": {},
+        "feature_windows": {},
+        "recent_checkins": [],
+        "calorie_summary": {},
+        "recipe_history": {},
+        "intervention_history": {},
+        "signals": {
+            "stress_level": 8,
+            "sleep_hours": 5.5,
+        },
+        "normalized_event_id": None,
+    }
+
+
 def test_signal_interpretation_keeps_llm_mode_when_summary_is_present_but_findings_are_empty(monkeypatch):
     agent = SignalInterpretationAgent()
     monkeypatch.setattr(
@@ -116,23 +146,8 @@ def test_coordinator_run_handles_partial_validation_patch_without_crashing(monke
 
     monkeypatch.setattr(
         pipeline.tool_provider,
-        "get_user_profile",
-        lambda persona_type="student": {
-            "user_id": 12,
-            "goal": "stress_reduction",
-            "dietary_style": "balanced",
-            "allergies": [],
-            "persona_type": "student",
-            "accessibility": None,
-        },
-    )
-    monkeypatch.setattr(
-        pipeline.tool_provider,
-        "get_recent_signals",
-        lambda scenario="stressed_student": [
-            {"signal_type": "stress_level", "value": 8},
-            {"signal_type": "sleep_hours", "value": 5.5},
-        ],
+        "get_personalization_context",
+        lambda **_kwargs: _stub_personalization_context(profile_user_id=12, persona_type="student"),
     )
     monkeypatch.setattr(
         pipeline.tool_provider,
@@ -158,6 +173,13 @@ def test_coordinator_run_handles_partial_validation_patch_without_crashing(monke
             "escalation_needed": False,
             "coordinator_review": False,
             "confidence": 0.8,
+            "subscores": {
+                "physiological_strain": 0.61,
+                "emotional_strain": 0.52,
+                "recovery_debt": 0.58,
+                "adherence_risk": 0.33,
+            },
+            "drivers": ["Stress is elevated and increasing physiological strain."],
             "rationale": "Elevated stress.",
             "generation_mode": "llm",
             "generation_error": "",
@@ -213,6 +235,7 @@ def test_coordinator_run_handles_partial_validation_patch_without_crashing(monke
     assert result["final_plan"]["activity_suggestion"] == "Take a short walk."
     assert result["final_plan"]["notes"] == "Validation updated the plan."
     assert result["intervention_record"]["meal_suggestion"] == "A balanced meal."
+    assert result["intervention_record"]["risk_subscores"]["physiological_strain"] == 0.61
 
 
 def test_coordinator_persists_artifacts_for_run_owner_not_profile_user(monkeypatch):
@@ -222,23 +245,8 @@ def test_coordinator_persists_artifacts_for_run_owner_not_profile_user(monkeypat
 
     monkeypatch.setattr(
         pipeline.tool_provider,
-        "get_user_profile",
-        lambda persona_type="student": {
-            "user_id": 999,
-            "goal": "stress_reduction",
-            "dietary_style": "balanced",
-            "allergies": [],
-            "persona_type": "student",
-            "accessibility": None,
-        },
-    )
-    monkeypatch.setattr(
-        pipeline.tool_provider,
-        "get_recent_signals",
-        lambda scenario="stressed_student": [
-            {"signal_type": "stress_level", "value": 8},
-            {"signal_type": "sleep_hours", "value": 5.5},
-        ],
+        "get_personalization_context",
+        lambda **_kwargs: _stub_personalization_context(profile_user_id=999, persona_type="student"),
     )
     monkeypatch.setattr(
         pipeline.tool_provider,
@@ -264,6 +272,13 @@ def test_coordinator_persists_artifacts_for_run_owner_not_profile_user(monkeypat
             "escalation_needed": False,
             "coordinator_review": False,
             "confidence": 0.8,
+            "subscores": {
+                "physiological_strain": 0.61,
+                "emotional_strain": 0.52,
+                "recovery_debt": 0.58,
+                "adherence_risk": 0.33,
+            },
+            "drivers": ["Stress is elevated and increasing physiological strain."],
             "rationale": "Elevated stress.",
             "generation_mode": "llm",
             "generation_error": "",
@@ -330,6 +345,7 @@ def test_coordinator_persists_artifacts_for_run_owner_not_profile_user(monkeypat
     assert captured["intervention"]["user_id"] == 12
     assert captured["case"]["user_id"] == 12
     assert captured["notification"]["user_id"] == 12
+    assert captured["intervention"]["risk_subscores"]["recovery_debt"] == 0.58
     assert result["intervention_record"]["user_id"] == 12
 
 
@@ -339,23 +355,8 @@ def test_coordinator_run_uses_adk_runtime_path_when_available(monkeypatch):
 
     monkeypatch.setattr(
         pipeline.tool_provider,
-        "get_user_profile",
-        lambda persona_type="student": {
-            "user_id": 12,
-            "goal": "stress_reduction",
-            "dietary_style": "balanced",
-            "allergies": [],
-            "persona_type": "student",
-            "accessibility": None,
-        },
-    )
-    monkeypatch.setattr(
-        pipeline.tool_provider,
-        "get_recent_signals",
-        lambda scenario="stressed_student": [
-            {"signal_type": "stress_level", "value": 8},
-            {"signal_type": "sleep_hours", "value": 5.5},
-        ],
+        "get_personalization_context",
+        lambda **_kwargs: _stub_personalization_context(profile_user_id=12, persona_type="student"),
     )
     monkeypatch.setattr(
         pipeline.tool_provider,
@@ -392,6 +393,13 @@ def test_coordinator_run_uses_adk_runtime_path_when_available(monkeypatch):
                     "escalation_needed": False,
                     "coordinator_review": False,
                     "confidence": 0.8,
+                    "subscores": {
+                        "physiological_strain": 0.61,
+                        "emotional_strain": 0.52,
+                        "recovery_debt": 0.58,
+                        "adherence_risk": 0.33,
+                    },
+                    "drivers": ["Stress is elevated and increasing physiological strain."],
                     "rationale": "Elevated stress.",
                     "generation_mode": "llm",
                     "generation_error": "",
@@ -470,23 +478,8 @@ def test_coordinator_adk_runtime_executes_real_graph_with_fallbacks(monkeypatch)
 
     monkeypatch.setattr(
         pipeline.tool_provider,
-        "get_user_profile",
-        lambda persona_type="student": {
-            "user_id": 12,
-            "goal": "stress_reduction",
-            "dietary_style": "balanced",
-            "allergies": [],
-            "persona_type": "student",
-            "accessibility": None,
-        },
-    )
-    monkeypatch.setattr(
-        pipeline.tool_provider,
-        "get_recent_signals",
-        lambda scenario="stressed_student": [
-            {"signal_type": "stress_level", "value": 8},
-            {"signal_type": "sleep_hours", "value": 5.5},
-        ],
+        "get_personalization_context",
+        lambda **_kwargs: _stub_personalization_context(profile_user_id=12, persona_type="student"),
     )
     monkeypatch.setattr(
         pipeline.tool_provider,

@@ -14,6 +14,7 @@ def create_intervention(
     wellness_action: str,
     empathy_message: str,
     meal_constraints: Optional[List[str]] = None,
+    risk_subscores: Optional[Dict[str, Any]] = None,
     api_base_url: str,
     auth_header: str,
     demo_as: str = "",
@@ -36,5 +37,6 @@ def create_intervention(
             "wellness_action": wellness_action,
             "empathy_message": empathy_message,
             "meal_constraints": meal_constraints or [],
+            "risk_subscores": risk_subscores,
         },
     )

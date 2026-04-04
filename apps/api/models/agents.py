@@ -67,11 +67,26 @@ class Intervention(Base):
         Integer, ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True
     )
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    state_snapshot_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("personalization_state_snapshots.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    recipe_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("recipes.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    activity_template_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    wellness_template_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     meal_suggestion: Mapped[str] = mapped_column(Text, nullable=False, default="")
     activity_suggestion: Mapped[str] = mapped_column(Text, nullable=False, default="")
     wellness_action: Mapped[str] = mapped_column(Text, nullable=False, default="")
     empathy_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
     meal_constraints: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    risk_subscores: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    why_chosen: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    alternatives_considered: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    why_changed_from_previous: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )

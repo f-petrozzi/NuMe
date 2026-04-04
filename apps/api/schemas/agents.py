@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TriggerRunRequest(BaseModel):
@@ -65,10 +65,19 @@ class InterventionOut(BaseModel):
     id: int
     run_id: Optional[int]
     user_id: int
+    state_snapshot_id: Optional[int] = None
+    recipe_id: Optional[int] = None
+    activity_template_id: Optional[int] = None
+    wellness_template_id: Optional[int] = None
     meal_suggestion: str
     activity_suggestion: str
     wellness_action: str
     empathy_message: str
+    meal_constraints: List[str] = Field(default_factory=list)
+    risk_subscores: Optional[Dict[str, Any]] = None
+    why_chosen: Optional[Dict[str, Any]] = None
+    alternatives_considered: Optional[List[Any]] = None
+    why_changed_from_previous: Optional[List[str]] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

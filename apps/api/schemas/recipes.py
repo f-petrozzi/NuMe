@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RecipeIngredient(BaseModel):
@@ -21,8 +21,16 @@ class RecipeIn(BaseModel):
     prep_minutes: int = 0
     cook_minutes: int = 0
     servings: int = 2
-    tags: List[str] = []
-    ingredients: List[RecipeIngredient] = []
+    calories: Optional[int] = None
+    protein_grams: Optional[float] = None
+    carbs_grams: Optional[float] = None
+    fat_grams: Optional[float] = None
+    fiber_grams: Optional[float] = None
+    prep_effort: Optional[str] = None
+    equipment_tags: List[str] = Field(default_factory=list)
+    cost_level: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    ingredients: List[RecipeIngredient] = Field(default_factory=list)
     instructions: str = ""
     photo_filename: str = ""
 
@@ -37,6 +45,14 @@ class RecipeOut(BaseModel):
     prep_minutes: int
     cook_minutes: int
     servings: int
+    calories: Optional[int] = None
+    protein_grams: Optional[float] = None
+    carbs_grams: Optional[float] = None
+    fat_grams: Optional[float] = None
+    fiber_grams: Optional[float] = None
+    prep_effort: Optional[str] = None
+    equipment_tags: List[str] = Field(default_factory=list)
+    cost_level: Optional[str] = None
     tags: List[str]
     ingredients: List[Dict[str, Any]]
     instructions: str
@@ -61,8 +77,16 @@ class ParsedRecipe(BaseModel):
     prep_minutes: int = 0
     cook_minutes: int = 0
     servings: int = 2
-    tags: List[str] = []
-    ingredients: List[Dict[str, Any]] = []
+    calories: Optional[int] = None
+    protein_grams: Optional[float] = None
+    carbs_grams: Optional[float] = None
+    fat_grams: Optional[float] = None
+    fiber_grams: Optional[float] = None
+    prep_effort: Optional[str] = None
+    equipment_tags: List[str] = Field(default_factory=list)
+    cost_level: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    ingredients: List[Dict[str, Any]] = Field(default_factory=list)
     instructions: str = ""
     photo_url: str = ""
 

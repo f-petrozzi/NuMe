@@ -39,6 +39,7 @@ function formatError(error: unknown): string {
 }
 
 const RECIPE_CATEGORIES = ["Produce", "Meat", "Dairy", "Pantry", "Frozen", "Bakery", "Beverages", "Other"] as const;
+const LEVEL_OPTIONS = ["low", "medium", "high"] as const;
 
 const EMPTY_INGREDIENT = {
   name: "",
@@ -46,6 +47,18 @@ const EMPTY_INGREDIENT = {
   category: "Other",
   section: "",
 };
+
+function normalizeOptionalLevel(value: unknown): string | null {
+  const text = String(value || "").trim().toLowerCase();
+  return LEVEL_OPTIONS.includes(text as (typeof LEVEL_OPTIONS)[number]) ? text : null;
+}
+
+function parseOptionalNumber(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
+}
 
 function normalizeParsedRecipe(recipe: ParsedRecipeDto): ParsedRecipeDto {
   return {
@@ -55,6 +68,14 @@ function normalizeParsedRecipe(recipe: ParsedRecipeDto): ParsedRecipeDto {
     prep_minutes: Math.max(0, Number(recipe.prep_minutes) || 0),
     cook_minutes: Math.max(0, Number(recipe.cook_minutes) || 0),
     servings: Math.max(1, Number(recipe.servings) || 1),
+    calories: recipe.calories == null ? null : Math.max(0, Number(recipe.calories) || 0),
+    protein_grams: recipe.protein_grams == null ? null : Math.max(0, Number(recipe.protein_grams) || 0),
+    carbs_grams: recipe.carbs_grams == null ? null : Math.max(0, Number(recipe.carbs_grams) || 0),
+    fat_grams: recipe.fat_grams == null ? null : Math.max(0, Number(recipe.fat_grams) || 0),
+    fiber_grams: recipe.fiber_grams == null ? null : Math.max(0, Number(recipe.fiber_grams) || 0),
+    prep_effort: normalizeOptionalLevel(recipe.prep_effort),
+    equipment_tags: (recipe.equipment_tags || []).map((tag) => String(tag).trim().toLowerCase()).filter(Boolean).slice(0, 6),
+    cost_level: normalizeOptionalLevel(recipe.cost_level),
     tags: (recipe.tags || []).map((tag) => String(tag).trim().toLowerCase()).filter(Boolean).slice(0, 8),
     ingredients: recipe.ingredients?.length
       ? recipe.ingredients.map((ingredient) => ({
@@ -77,6 +98,14 @@ function toRecipeInput(recipe: ParsedRecipeDto): RecipeDraftInput {
     prep_minutes: Math.max(0, Number(recipe.prep_minutes) || 0),
     cook_minutes: Math.max(0, Number(recipe.cook_minutes) || 0),
     servings: Math.max(1, Number(recipe.servings) || 1),
+    calories: recipe.calories == null ? null : Math.max(0, Number(recipe.calories) || 0),
+    protein_grams: recipe.protein_grams == null ? null : Math.max(0, Number(recipe.protein_grams) || 0),
+    carbs_grams: recipe.carbs_grams == null ? null : Math.max(0, Number(recipe.carbs_grams) || 0),
+    fat_grams: recipe.fat_grams == null ? null : Math.max(0, Number(recipe.fat_grams) || 0),
+    fiber_grams: recipe.fiber_grams == null ? null : Math.max(0, Number(recipe.fiber_grams) || 0),
+    prep_effort: normalizeOptionalLevel(recipe.prep_effort),
+    equipment_tags: (recipe.equipment_tags || []).map((tag) => tag.trim().toLowerCase()).filter(Boolean).slice(0, 6),
+    cost_level: normalizeOptionalLevel(recipe.cost_level),
     tags: (recipe.tags || []).map((tag) => tag.trim().toLowerCase()).filter(Boolean).slice(0, 8),
     ingredients: (recipe.ingredients || [])
       .map((ingredient) => ({
@@ -430,6 +459,108 @@ function ParsedRecipeReview({
           </div>
         </div>
 
+        <div className="grid gap-4 sm:grid-cols-4">
+          <div className="space-y-2">
+            <Label htmlFor="parsed-prep-effort">Prep Effort</Label>
+            <Input
+              id="parsed-prep-effort"
+              value={recipe.prep_effort || ""}
+              onChange={(event) => updateField("prep_effort", normalizeOptionalLevel(event.target.value))}
+              placeholder="low, medium, or high"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="parsed-cost-level">Cost Level</Label>
+            <Input
+              id="parsed-cost-level"
+              value={recipe.cost_level || ""}
+              onChange={(event) => updateField("cost_level", normalizeOptionalLevel(event.target.value))}
+              placeholder="low, medium, or high"
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="parsed-equipment-tags">Equipment Tags</Label>
+            <Input
+              id="parsed-equipment-tags"
+              value={(recipe.equipment_tags || []).join(", ")}
+              onChange={(event) =>
+                updateField(
+                  "equipment_tags",
+                  event.target.value
+                    .split(",")
+                    .map((tag) => tag.trim().toLowerCase())
+                    .filter(Boolean)
+                    .slice(0, 6),
+                )
+              }
+              placeholder="blender, oven, pot"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-4">
+          <div>
+            <p className="text-sm font-semibold">Nutrition</p>
+            <p className="text-xs text-muted-foreground">Leave nutrition blank if the source does not provide it.</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-5">
+            <div className="space-y-2">
+              <Label htmlFor="parsed-calories">Calories</Label>
+              <Input
+                id="parsed-calories"
+                type="number"
+                min={0}
+                value={recipe.calories ?? ""}
+                onChange={(event) => updateField("calories", parseOptionalNumber(event.target.value))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="parsed-protein">Protein (g)</Label>
+              <Input
+                id="parsed-protein"
+                type="number"
+                min={0}
+                step="0.1"
+                value={recipe.protein_grams ?? ""}
+                onChange={(event) => updateField("protein_grams", parseOptionalNumber(event.target.value))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="parsed-carbs">Carbs (g)</Label>
+              <Input
+                id="parsed-carbs"
+                type="number"
+                min={0}
+                step="0.1"
+                value={recipe.carbs_grams ?? ""}
+                onChange={(event) => updateField("carbs_grams", parseOptionalNumber(event.target.value))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="parsed-fat">Fat (g)</Label>
+              <Input
+                id="parsed-fat"
+                type="number"
+                min={0}
+                step="0.1"
+                value={recipe.fat_grams ?? ""}
+                onChange={(event) => updateField("fat_grams", parseOptionalNumber(event.target.value))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="parsed-fiber">Fiber (g)</Label>
+              <Input
+                id="parsed-fiber"
+                type="number"
+                min={0}
+                step="0.1"
+                value={recipe.fiber_grams ?? ""}
+                onChange={(event) => updateField("fiber_grams", parseOptionalNumber(event.target.value))}
+              />
+            </div>
+          </div>
+        </div>
+
         <div className="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -540,10 +671,23 @@ function RecipeCard({ recipe, index }: { recipe: Recipe; index: number }) {
             {recipe.prep_time + recipe.cook_time} min
           </span>
           <span>{recipe.servings} serving{recipe.servings > 1 ? "s" : ""}</span>
+          {recipe.prep_effort ? <span>{recipe.prep_effort} effort</span> : null}
+          {recipe.cost_level ? <span>{recipe.cost_level} cost</span> : null}
         </div>
+        {(recipe.calories != null || recipe.protein_grams != null) ? (
+          <div className="mb-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
+            {recipe.calories != null ? <span>{recipe.calories} kcal</span> : null}
+            {recipe.protein_grams != null ? <span>{recipe.protein_grams}g protein</span> : null}
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-1.5">
           {recipe.tags.map((tag) => (
             <Badge key={tag} variant="outline" className="text-xs">
+              {tag}
+            </Badge>
+          ))}
+          {(recipe.equipment_tags || []).slice(0, 3).map((tag) => (
+            <Badge key={tag} variant="secondary" className="text-xs">
               {tag}
             </Badge>
           ))}

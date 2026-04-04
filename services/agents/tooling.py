@@ -75,6 +75,51 @@ class ToolProvider:
             )
         return get_recent_signals_stub(scenario=scenario)
 
+    def get_personalization_context(
+        self,
+        *,
+        run_id: int | None = None,
+        scenario: str = "live",
+    ) -> Dict[str, Any]:
+        if not self.use_stubs:
+            func = _require_callable(
+                "services.tools.get_personalization_context_tool",
+                "get_personalization_context",
+            )
+            return func(
+                api_base_url=self.api_base_url,
+                auth_header=self.auth_header,
+                demo_as=self.demo_as,
+                internal_api_token=self.internal_api_token,
+                acting_user_id=self.acting_user_id,
+                run_id=run_id,
+                scenario=scenario,
+            )
+
+        inferred_persona = "student" if scenario == "stressed_student" else (
+            "caregiver" if scenario == "exhausted_caregiver" else "older_adult"
+        )
+        profile = get_user_profile_stub(persona_type=inferred_persona)
+        raw_signals = get_recent_signals_stub(scenario=scenario)
+        signals = {item["signal_type"]: item["value"] for item in raw_signals}
+        return {
+            "snapshot_id": 0,
+            "user_id": self.acting_user_id or 0,
+            "run_id": run_id,
+            "scenario": scenario,
+            "persona_type": profile.get("persona_type", inferred_persona),
+            "profile": profile,
+            "dynamic_state": {},
+            "archetype_scores": {},
+            "feature_windows": {},
+            "recent_checkins": [],
+            "calorie_summary": {},
+            "recipe_history": {},
+            "intervention_history": {},
+            "signals": signals,
+            "normalized_event_id": None,
+        }
+
     def get_resources(self, persona: str) -> List[Dict[str, Any]]:
         if not self.use_stubs:
             func = _require_callable("services.tools.get_resources_tool", "get_resources")

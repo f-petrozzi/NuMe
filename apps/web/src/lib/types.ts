@@ -149,6 +149,14 @@ export interface Recipe {
   prep_time: number;
   cook_time: number;
   servings: number;
+  calories?: number | null;
+  protein_grams?: number | null;
+  carbs_grams?: number | null;
+  fat_grams?: number | null;
+  fiber_grams?: number | null;
+  prep_effort?: string | null;
+  equipment_tags?: string[];
+  cost_level?: string | null;
   ingredients: RecipeIngredientGroup[];
   ingredient_items: RecipeIngredient[];
   instructions: RecipeInstructionGroup[];

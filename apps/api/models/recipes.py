@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,6 +22,14 @@ class Recipe(Base):
     prep_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cook_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     servings: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    calories: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    protein_grams: Mapped[float | None] = mapped_column(Float, nullable=True)
+    carbs_grams: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fat_grams: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fiber_grams: Mapped[float | None] = mapped_column(Float, nullable=True)
+    prep_effort: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    equipment_tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    cost_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
     tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     # [{name, quantity, category, section}]
     ingredients: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)

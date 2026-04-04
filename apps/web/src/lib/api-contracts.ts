@@ -110,11 +110,19 @@ export interface InterventionDto {
   id: number;
   run_id: number | null;
   user_id: number;
+  state_snapshot_id?: number | null;
+  recipe_id?: number | null;
+  activity_template_id?: number | null;
+  wellness_template_id?: number | null;
   meal_suggestion: string;
   activity_suggestion: string;
   wellness_action: string;
   empathy_message: string;
   meal_constraints?: string[];
+  risk_subscores?: Record<string, unknown> | null;
+  why_chosen?: Record<string, unknown> | null;
+  alternatives_considered?: unknown[] | null;
+  why_changed_from_previous?: string[] | null;
   created_at: string;
 }
 
@@ -177,6 +185,14 @@ export interface RecipeDto {
   prep_minutes: number;
   cook_minutes: number;
   servings: number;
+  calories?: number | null;
+  protein_grams?: number | null;
+  carbs_grams?: number | null;
+  fat_grams?: number | null;
+  fiber_grams?: number | null;
+  prep_effort?: string | null;
+  equipment_tags?: string[];
+  cost_level?: string | null;
   tags: string[];
   ingredients: RecipeIngredientDto[];
   instructions: string;
@@ -191,6 +207,14 @@ export interface ParsedRecipeDto {
   prep_minutes: number;
   cook_minutes: number;
   servings: number;
+  calories?: number | null;
+  protein_grams?: number | null;
+  carbs_grams?: number | null;
+  fat_grams?: number | null;
+  fiber_grams?: number | null;
+  prep_effort?: string | null;
+  equipment_tags?: string[];
+  cost_level?: string | null;
   tags: string[];
   ingredients: RecipeIngredientDto[];
   instructions: string;

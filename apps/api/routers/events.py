@@ -21,6 +21,7 @@ from dependencies.rate_limit import COST_HEAVY, enforce_ai_rate_limit, require_a
 from models.agents import AgentRun
 from models.events import BehaviorEvent, NormalizedEvent, WearableEvent
 from models.user import User
+from risk_scoring import normalize_checkin_payload
 from run_dispatch import coordinator_api_base_url, coordinator_auth_header
 from schemas.agents import AgentRunOut
 from schemas.events import CheckInRequest, IngestEventRequest, NormalizedEventOut, SimulateRequest, WearableEventOut
@@ -68,7 +69,14 @@ def _build_summary(signals: dict[str, Any]) -> str:
     if "steps" in signals:
         parts.append(f"{signals['steps']} steps")
     if "check_in_mood" in signals:
-        parts.append(f"mood: {signals['check_in_mood']}")
+        raw_mood = str(signals["check_in_mood"]).strip()
+        mood_part = f"mood {raw_mood}"
+        if raw_mood.replace(".", "", 1).isdigit():
+            mood_part = f"{mood_part}/10"
+        valence = str(signals.get("check_in_valence", "")).strip()
+        if valence and valence != "neutral":
+            mood_part = f"{mood_part} ({valence})"
+        parts.append(mood_part)
     return "; ".join(parts) if parts else "health check-in"
 
 
@@ -125,15 +133,17 @@ async def checkin(
     Returns the AgentRun so the frontend can navigate directly to the trace.
     """
     now = datetime.now(timezone.utc)
-    signals: dict[str, Any] = {}
-
-    # Convert frontend stress (0-100) to 1-10 scale
-    stress_1_10 = max(1, min(10, round(body.stress / 10))) or 1
+    signals = normalize_checkin_payload(
+        mood=body.mood,
+        sleep_hours=body.sleep_hours,
+        stress=body.stress,
+        note=body.note,
+    )
 
     raw_events = [
         {"signal_type": "check_in_mood", "value": str(body.mood), "unit": "1-10"},
         {"signal_type": "sleep_hours", "value": str(body.sleep_hours), "unit": "hours"},
-        {"signal_type": "stress_level", "value": str(stress_1_10), "unit": "1-10"},
+        {"signal_type": "stress_level", "value": str(signals["stress_level"]), "unit": "1-10"},
     ]
     if body.note.strip():
         raw_events.append({"signal_type": "check_in_note", "value": body.note.strip(), "unit": ""})
@@ -155,7 +165,6 @@ async def checkin(
             recorded_at=now,
         )
         db.add(event)
-        signals[sig["signal_type"]] = sig["value"]
 
     norm = NormalizedEvent(
         user_id=user.id,

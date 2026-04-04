@@ -52,6 +52,14 @@ export interface RecipeDraftInput {
   prep_minutes: number;
   cook_minutes: number;
   servings: number;
+  calories?: number | null;
+  protein_grams?: number | null;
+  carbs_grams?: number | null;
+  fat_grams?: number | null;
+  fiber_grams?: number | null;
+  prep_effort?: string | null;
+  equipment_tags?: string[];
+  cost_level?: string | null;
   tags: string[];
   ingredients: Array<{
     name: string;
@@ -290,6 +298,14 @@ async function parseRecipeUrlMock(url: string): Promise<ParsedRecipeDto> {
     prep_minutes: 10,
     cook_minutes: 15,
     servings: 2,
+    calories: null,
+    protein_grams: null,
+    carbs_grams: null,
+    fat_grams: null,
+    fiber_grams: null,
+    prep_effort: "medium",
+    equipment_tags: [],
+    cost_level: null,
     tags: ["quick", "imported"],
     ingredients: [
       { name: "olive oil", quantity: "1 tbsp", category: "Pantry", section: "Main" },
@@ -309,6 +325,14 @@ async function parseRecipeTextMock(text: string): Promise<ParsedRecipeDto> {
     prep_minutes: 10,
     cook_minutes: 10,
     servings: 2,
+    calories: null,
+    protein_grams: null,
+    carbs_grams: null,
+    fat_grams: null,
+    fiber_grams: null,
+    prep_effort: "low",
+    equipment_tags: [],
+    cost_level: null,
     tags: ["pasted", "ai"],
     ingredients: [
       { name: "rolled oats", quantity: "1/2 cup", category: "Pantry", section: "Main" },
@@ -331,6 +355,14 @@ async function createRecipeMock(input: RecipeDraftInput): Promise<Recipe> {
     prep_minutes: input.prep_minutes,
     cook_minutes: input.cook_minutes,
     servings: input.servings,
+    calories: input.calories ?? null,
+    protein_grams: input.protein_grams ?? null,
+    carbs_grams: input.carbs_grams ?? null,
+    fat_grams: input.fat_grams ?? null,
+    fiber_grams: input.fiber_grams ?? null,
+    prep_effort: input.prep_effort ?? null,
+    equipment_tags: input.equipment_tags ?? [],
+    cost_level: input.cost_level ?? null,
     tags: input.tags,
     ingredients: input.ingredients,
     instructions: input.instructions,

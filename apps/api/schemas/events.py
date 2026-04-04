@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class IngestEventRequest(BaseModel):
@@ -19,9 +19,9 @@ class SimulateRequest(BaseModel):
 
 
 class CheckInRequest(BaseModel):
-    mood: int           # 1-10
-    sleep_hours: float  # 0-12
-    stress: int         # 0-100 (frontend percentage scale; stored as 1-10 in signal)
+    mood: int = Field(ge=1, le=10)           # 1-10
+    sleep_hours: float = Field(ge=0, le=24)  # 0-24
+    stress: int = Field(ge=0, le=100)        # 0-100 (frontend percentage scale; stored as 1-10 in signal)
     note: str = ""
 
 

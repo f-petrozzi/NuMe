@@ -81,6 +81,7 @@ from routers.interventions import router as interventions_router
 from routers.notifications import router as notifications_router
 from routers.resources import router as resources_router
 from routers.health import router as health_router
+from routers.personalization import router as personalization_router
 from routers.recipes import router as recipes_router
 from routers.scenarios import router as scenarios_router
 from routers.audit import router as audit_router
@@ -96,6 +97,7 @@ app.include_router(interventions_router)
 app.include_router(notifications_router)
 app.include_router(resources_router)
 app.include_router(health_router)
+app.include_router(personalization_router)
 app.include_router(recipes_router)
 app.include_router(scenarios_router)
 app.include_router(audit_router)

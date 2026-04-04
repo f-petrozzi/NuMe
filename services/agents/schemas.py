@@ -33,6 +33,8 @@ class RiskAssessment(Dumpable):
     coordinator_review: bool
     confidence: float
     rationale: str
+    subscores: Dict[str, float] = field(default_factory=dict)
+    drivers: List[str] = field(default_factory=list)
     generation_mode: str = "fallback"
     generation_error: str = ""
 

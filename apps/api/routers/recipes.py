@@ -68,6 +68,8 @@ _MAX_HTML_BYTES = 15 * 1024 * 1024
 _MAX_REDIRECTS = 5
 
 VALID_CATEGORIES = {"Produce", "Meat", "Dairy", "Pantry", "Frozen", "Bakery", "Beverages", "Other"}
+VALID_PREP_EFFORTS = {"low", "medium", "high"}
+VALID_COST_LEVELS = {"low", "medium", "high"}
 
 DEFAULT_TEMPLATE_RECIPES = [
     {
@@ -77,6 +79,14 @@ DEFAULT_TEMPLATE_RECIPES = [
         "prep_minutes": 8,
         "cook_minutes": 0,
         "servings": 1,
+        "calories": 320,
+        "protein_grams": 24.0,
+        "carbs_grams": 22.0,
+        "fat_grams": 14.0,
+        "fiber_grams": 4.0,
+        "prep_effort": "low",
+        "equipment_tags": ["bowl", "spoon"],
+        "cost_level": "medium",
         "ingredients": [
             {"name": "Greek yogurt", "quantity": "1 cup", "category": "Dairy", "section": "Base"},
             {"name": "Baby spinach", "quantity": "1 cup", "category": "Produce", "section": "Base"},
@@ -92,6 +102,14 @@ DEFAULT_TEMPLATE_RECIPES = [
         "prep_minutes": 5,
         "cook_minutes": 12,
         "servings": 1,
+        "calories": 360,
+        "protein_grams": 15.0,
+        "carbs_grams": 52.0,
+        "fat_grams": 9.0,
+        "fiber_grams": 8.0,
+        "prep_effort": "low",
+        "equipment_tags": ["microwave", "bowl", "spoon"],
+        "cost_level": "low",
         "ingredients": [
             {"name": "Microwave rice", "quantity": "1 cup", "category": "Pantry", "section": "Main"},
             {"name": "Cooked lentils", "quantity": "3/4 cup", "category": "Pantry", "section": "Main"},
@@ -107,6 +125,14 @@ DEFAULT_TEMPLATE_RECIPES = [
         "prep_minutes": 5,
         "cook_minutes": 10,
         "servings": 1,
+        "calories": 340,
+        "protein_grams": 14.0,
+        "carbs_grams": 49.0,
+        "fat_grams": 9.0,
+        "fiber_grams": 8.0,
+        "prep_effort": "low",
+        "equipment_tags": ["pot", "spoon"],
+        "cost_level": "low",
         "ingredients": [
             {"name": "Rolled oats", "quantity": "1/2 cup", "category": "Pantry", "section": "Oats"},
             {"name": "Milk or soy milk", "quantity": "1 cup", "category": "Dairy", "section": "Oats"},
@@ -122,6 +148,14 @@ DEFAULT_TEMPLATE_RECIPES = [
         "prep_minutes": 5,
         "cook_minutes": 0,
         "servings": 1,
+        "calories": 290,
+        "protein_grams": 23.0,
+        "carbs_grams": 27.0,
+        "fat_grams": 8.0,
+        "fiber_grams": 5.0,
+        "prep_effort": "low",
+        "equipment_tags": ["blender"],
+        "cost_level": "medium",
         "ingredients": [
             {"name": "Soy milk", "quantity": "1 cup", "category": "Beverages", "section": "Smoothie"},
             {"name": "Banana", "quantity": "1", "category": "Produce", "section": "Smoothie"},
@@ -137,6 +171,14 @@ DEFAULT_TEMPLATE_RECIPES = [
         "prep_minutes": 10,
         "cook_minutes": 5,
         "servings": 1,
+        "calories": 310,
+        "protein_grams": 13.0,
+        "carbs_grams": 39.0,
+        "fat_grams": 11.0,
+        "fiber_grams": 7.0,
+        "prep_effort": "low",
+        "equipment_tags": ["toaster", "bowl", "fork"],
+        "cost_level": "low",
         "ingredients": [
             {"name": "Bread", "quantity": "2 slices", "category": "Bakery", "section": "Toast"},
             {"name": "Chickpeas", "quantity": "1/2 cup", "category": "Pantry", "section": "Topping"},
@@ -175,6 +217,14 @@ async def _ensure_template_recipes(db: AsyncSession, *, user_id: int) -> None:
                 prep_minutes=template["prep_minutes"],
                 cook_minutes=template["cook_minutes"],
                 servings=template["servings"],
+                calories=template.get("calories"),
+                protein_grams=template.get("protein_grams"),
+                carbs_grams=template.get("carbs_grams"),
+                fat_grams=template.get("fat_grams"),
+                fiber_grams=template.get("fiber_grams"),
+                prep_effort=template.get("prep_effort"),
+                equipment_tags=template.get("equipment_tags", []),
+                cost_level=template.get("cost_level"),
                 tags=template["tags"],
                 ingredients=template["ingredients"],
                 instructions=template["instructions"],
@@ -378,6 +428,90 @@ def _safe_int(val: Any, default: int = 0) -> int:
         return default
 
 
+def _extract_numeric_value(val: Any) -> float | None:
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    match = re.search(r"(-?\d+(?:\.\d+)?)", str(val))
+    if not match:
+        return None
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
+
+
+def _normalize_optional_int(val: Any) -> int | None:
+    parsed = _extract_numeric_value(val)
+    if parsed is None:
+        return None
+    return max(0, int(round(parsed)))
+
+
+def _normalize_optional_float(val: Any) -> float | None:
+    parsed = _extract_numeric_value(val)
+    if parsed is None:
+        return None
+    return round(max(0.0, parsed), 2)
+
+
+def _normalize_level(value: Any, *, valid_values: set[str]) -> str | None:
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    return text if text in valid_values else None
+
+
+def _normalize_string_list(values: Any) -> list[str]:
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = [part.strip() for part in values.split(",")]
+    normalized: list[str] = []
+    for value in values:
+        text = str(value or "").strip().lower()
+        if text and text not in normalized:
+            normalized.append(text)
+    return normalized
+
+
+def _infer_prep_effort(prep_minutes: int, cook_minutes: int) -> str | None:
+    total_minutes = max(0, prep_minutes) + max(0, cook_minutes)
+    if total_minutes <= 0:
+        return None
+    if total_minutes <= 15:
+        return "low"
+    if total_minutes <= 35:
+        return "medium"
+    return "high"
+
+
+def _extract_nutrition_jsonld(jsonld: dict | None) -> dict[str, Any]:
+    if not isinstance(jsonld, dict):
+        return {
+            "calories": None,
+            "protein_grams": None,
+            "carbs_grams": None,
+            "fat_grams": None,
+            "fiber_grams": None,
+        }
+
+    nutrition = jsonld.get("nutrition")
+    if isinstance(nutrition, list) and nutrition:
+        nutrition = next((item for item in nutrition if isinstance(item, dict)), None)
+    if not isinstance(nutrition, dict):
+        nutrition = {}
+
+    return {
+        "calories": _normalize_optional_int(nutrition.get("calories")),
+        "protein_grams": _normalize_optional_float(nutrition.get("proteinContent")),
+        "carbs_grams": _normalize_optional_float(nutrition.get("carbohydrateContent")),
+        "fat_grams": _normalize_optional_float(nutrition.get("fatContent")),
+        "fiber_grams": _normalize_optional_float(nutrition.get("fiberContent")),
+    }
+
+
 def _extract_servings(val: Any, default: int = 0) -> int:
     if val is None:
         return default
@@ -485,6 +619,8 @@ async def parse_url(
         m = re.search(r'(\d+)', str(ct))
         if m:
             cook_minutes = int(m.group(1))
+    prep_effort = _infer_prep_effort(prep_minutes, cook_minutes)
+    nutrition = _extract_nutrition_jsonld(jsonld)
 
     # Servings
     servings = 2
@@ -573,6 +709,14 @@ async def parse_url(
         prep_minutes=prep_minutes,
         cook_minutes=cook_minutes,
         servings=servings or 2,
+        calories=nutrition["calories"],
+        protein_grams=nutrition["protein_grams"],
+        carbs_grams=nutrition["carbs_grams"],
+        fat_grams=nutrition["fat_grams"],
+        fiber_grams=nutrition["fiber_grams"],
+        prep_effort=prep_effort,
+        equipment_tags=[],
+        cost_level=None,
         tags=[],
         ingredients=ingredients,
         instructions=instructions,
@@ -606,6 +750,8 @@ async def parse_text(
         prompt = (
             'Extract the recipe below into a JSON object with exactly these keys:\n'
             'title, description, prep_minutes, cook_minutes, servings,\n'
+            'calories, protein_grams, carbs_grams, fat_grams, fiber_grams,\n'
+            'prep_effort, equipment_tags, cost_level,\n'
             'ingredients (array of {name, quantity, category, section}), instructions (array of strings), tags.\n\n'
             'Rules:\n'
             '- "quantity": copy the FULL quantity string exactly as written including alternatives and parenthetical notes.\n'
@@ -620,6 +766,10 @@ async def parse_text(
             '  insert that section name prefixed with "## " as its own array element immediately before the steps.\n'
             '  Example: ["## Make the sauce", "Blend tomatoes.", "## Assemble", "Layer ingredients."].\n'
             '- "tags": array of 1-4 short lowercase tag strings (e.g. ["italian", "pasta", "quick"]).\n'
+            '- "calories", "protein_grams", "carbs_grams", "fat_grams", and "fiber_grams" should be numbers when clearly stated, otherwise null.\n'
+            '- "prep_effort": "low" | "medium" | "high". Infer from the recipe complexity if it is clear; otherwise null.\n'
+            '- "equipment_tags": lowercase array such as ["blender", "oven", "pot"]. Return [] if unclear.\n'
+            '- "cost_level": "low" | "medium" | "high" when clearly inferable from ingredients, otherwise null.\n'
             'Return only the JSON object, no markdown fences.\n\n'
             + body.text
         )
@@ -665,6 +815,14 @@ async def parse_text(
         prep_minutes=_safe_int(data.get("prep_minutes")),
         cook_minutes=_safe_int(data.get("cook_minutes")),
         servings=_safe_int(data.get("servings"), 2) or 2,
+        calories=_normalize_optional_int(data.get("calories")),
+        protein_grams=_normalize_optional_float(data.get("protein_grams")),
+        carbs_grams=_normalize_optional_float(data.get("carbs_grams")),
+        fat_grams=_normalize_optional_float(data.get("fat_grams")),
+        fiber_grams=_normalize_optional_float(data.get("fiber_grams")),
+        prep_effort=_normalize_level(data.get("prep_effort"), valid_values=VALID_PREP_EFFORTS),
+        equipment_tags=_normalize_string_list(data.get("equipment_tags")),
+        cost_level=_normalize_level(data.get("cost_level"), valid_values=VALID_COST_LEVELS),
         tags=tags,
         ingredients=ingredients,
         instructions=instructions,
@@ -682,6 +840,10 @@ async def create_recipe(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    prep_effort = _normalize_level(body.prep_effort, valid_values=VALID_PREP_EFFORTS) or _infer_prep_effort(
+        body.prep_minutes,
+        body.cook_minutes,
+    )
     recipe = Recipe(
         user_id=user.id,
         title=body.title,
@@ -691,6 +853,14 @@ async def create_recipe(
         prep_minutes=body.prep_minutes,
         cook_minutes=body.cook_minutes,
         servings=body.servings,
+        calories=_normalize_optional_int(body.calories),
+        protein_grams=_normalize_optional_float(body.protein_grams),
+        carbs_grams=_normalize_optional_float(body.carbs_grams),
+        fat_grams=_normalize_optional_float(body.fat_grams),
+        fiber_grams=_normalize_optional_float(body.fiber_grams),
+        prep_effort=prep_effort,
+        equipment_tags=_normalize_string_list(body.equipment_tags),
+        cost_level=_normalize_level(body.cost_level, valid_values=VALID_COST_LEVELS),
         tags=body.tags,
         ingredients=[i.model_dump() for i in body.ingredients],
         instructions=body.instructions,

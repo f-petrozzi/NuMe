@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from main import app
-from models import AgentMessage, AgentRun, AuditLog, User
+from models import AgentMessage, AgentRun, AuditLog, PersonalizationStateSnapshot, User
 from settings import settings
 
 
@@ -133,3 +133,32 @@ async def test_internal_auth_supports_run_failure_persistence(
     audits = (await db.execute(select(AuditLog).where(AuditLog.entity_id == str(run.id)))).scalars().all()
     assert len(audits) == 1
     assert audits[0].user_id == user.id
+
+
+@pytest.mark.asyncio
+async def test_internal_auth_can_build_personalization_context(
+    db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    user = User(id=10, email="personalization@example.com", role="member")
+    db.add(user)
+    await db.commit()
+
+    monkeypatch.setattr(settings, "internal_api_token", "test-internal-token")
+
+    async with _internal_client(db) as client:
+        response = await client.get(
+            "/api/personalization/context",
+            params={"scenario": "stressed_student"},
+            headers=_internal_headers(api_key="test-internal-token", user_id=user.id),
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["user_id"] == user.id
+    assert body["persona_type"] == "student"
+    assert body["snapshot_id"] is not None
+
+    snapshot = await db.get(PersonalizationStateSnapshot, body["snapshot_id"])
+    assert snapshot is not None
+    assert snapshot.user_id == user.id
