@@ -100,7 +100,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-    command: sh -c "pip install --no-cache-dir -r services/remote_specialists/requirements.txt && uvicorn services.remote_specialists.student_support.app:app --host 0.0.0.0 --port 8001 --reload"
+    command: sh -c "pip install --no-cache-dir -r services/remote_specialists/requirements.txt && uvicorn services.remote_specialists.student_support.app:app --host 0.0.0.0 --port 8001"
 
   specialist-caregiver:
     image: python:3.11-slim
@@ -135,7 +135,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-    command: sh -c "pip install --no-cache-dir -r services/remote_specialists/requirements.txt && uvicorn services.remote_specialists.caregiver_burnout.app:app --host 0.0.0.0 --port 8002 --reload"
+    command: sh -c "pip install --no-cache-dir -r services/remote_specialists/requirements.txt && uvicorn services.remote_specialists.caregiver_burnout.app:app --host 0.0.0.0 --port 8002"
 
   web:
     build:

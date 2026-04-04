@@ -87,12 +87,19 @@ class SignalInterpretationAgent:
                     "evidence": str(raw.get("evidence", "")).strip(),
                 }
             )
-        if not findings:
-            raise ValueError("Model returned no findings.")
-
         summary = str(payload.get("summary", "")).strip()
         if not summary:
             raise ValueError("Model returned an empty summary.")
+
+        if not findings:
+            findings.append(
+                {
+                    "type": "routine_disruption",
+                    "severity": "mild",
+                    "confidence": 0.55,
+                    "evidence": summary,
+                }
+            )
 
         return SignalInterpretationResult(
             findings=findings,

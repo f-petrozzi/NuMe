@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timezone
 import json
+from time import sleep
 from typing import Any, Dict, List
 from uuid import uuid4
 
@@ -58,6 +59,9 @@ except ImportError:
 
 
 class CareCoordinatorPipeline:
+    _REMOTE_SPECIALIST_MAX_ATTEMPTS = 3
+    _REMOTE_SPECIALIST_RETRY_DELAY_SECONDS = 0.75
+
     def __init__(self, settings: Settings, tool_provider: ToolProvider) -> None:
         self.settings = settings
         self.tool_provider = tool_provider
@@ -252,6 +256,24 @@ class CareCoordinatorPipeline:
         parts = [part.strip() for part in (upstream_error, generation_error) if part and part.strip()]
         return " | ".join(parts)
 
+    @staticmethod
+    def _is_transient_remote_specialist_error(error: Exception) -> bool:
+        text = str(error).lower()
+        return any(
+            marker in text
+            for marker in (
+                "all connection attempts failed",
+                "connection refused",
+                "connection reset",
+                "failed to resolve agentcard",
+                "failed to resolve agent card",
+                "network communication error",
+                "remote specialist returned no text response",
+                "service unavailable",
+                "timed out",
+            )
+        )
+
     def _generate_local_specialist(
         self,
         *,
@@ -320,6 +342,41 @@ class CareCoordinatorPipeline:
         ).model_dump()
 
     def _invoke_remote_specialist(
+        self,
+        *,
+        specialist_agent: RemoteA2aAgent,
+        persona_type: str,
+        findings: List[Dict[str, Any]],
+        risk: Dict[str, Any],
+        draft_plan: Dict[str, Any],
+        resources: List[str],
+    ) -> Dict[str, Any]:
+        last_error: Exception | None = None
+        for attempt in range(1, self._REMOTE_SPECIALIST_MAX_ATTEMPTS + 1):
+            try:
+                return self._invoke_remote_specialist_once(
+                    specialist_agent=specialist_agent,
+                    persona_type=persona_type,
+                    findings=findings,
+                    risk=risk,
+                    draft_plan=draft_plan,
+                    resources=resources,
+                )
+            except Exception as exc:
+                last_error = exc
+                should_retry = (
+                    attempt < self._REMOTE_SPECIALIST_MAX_ATTEMPTS
+                    and self._is_transient_remote_specialist_error(exc)
+                )
+                if not should_retry:
+                    raise
+                sleep(self._REMOTE_SPECIALIST_RETRY_DELAY_SECONDS * attempt)
+
+        raise RuntimeError(
+            f"Remote specialist retry budget exhausted for {specialist_agent.name}: {last_error}"
+        ) from last_error
+
+    def _invoke_remote_specialist_once(
         self,
         *,
         specialist_agent: RemoteA2aAgent,

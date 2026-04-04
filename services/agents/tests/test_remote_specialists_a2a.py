@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 from a2a.types import AgentCard
 from fastapi.testclient import TestClient
@@ -153,3 +155,59 @@ def test_coordinator_consumes_remote_specialist_over_official_adk_a2a(monkeypatc
     assert result["resources"] == ["Campus counseling"]
     assert result["burnout_risk_flag"] is True
     assert "study-break" in " ".join(result["intervention_adjustments"])
+
+
+def test_coordinator_retries_transient_remote_specialist_failures(monkeypatch):
+    pipeline = CareCoordinatorPipeline(Settings(), ToolProvider(use_stubs=True))
+    attempts = {"count": 0}
+
+    def fake_run_text_agent(**_kwargs):
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise RuntimeError(
+                "Failed to initialize remote A2A agent StudentSupportSpecialist: "
+                "Failed to resolve AgentCard from URL http://specialist-student:8001/.well-known/agent-card.json: "
+                "HTTP Error 503: Network communication error fetching agent card from "
+                "http://specialist-student:8001/.well-known/agent-card.json: All connection attempts failed"
+            )
+        return [
+            SimpleNamespace(
+                author="StudentSupportSpecialist",
+                error_message="",
+                content=SimpleNamespace(
+                    parts=[
+                        SimpleNamespace(
+                            text=json.dumps(
+                                {
+                                    "enriched_context": "Student-specific support context.",
+                                    "resources": ["Campus counseling", "Peer tutoring"],
+                                    "intervention_adjustments": ["Keep the plan low-pressure."],
+                                    "burnout_risk_flag": True,
+                                    "escalation_recommendation": "coordinator_review",
+                                    "generation_mode": "llm",
+                                    "generation_error": "",
+                                }
+                            )
+                        )
+                    ]
+                ),
+            )
+        ]
+
+    monkeypatch.setattr("services.agents.coordinator.agent.run_text_agent", fake_run_text_agent)
+    monkeypatch.setattr("services.agents.coordinator.agent.sleep", lambda _seconds: None)
+
+    specialist = type("FakeRemoteAgent", (), {"name": "StudentSupportSpecialist"})()
+    result = pipeline._invoke_remote_specialist(
+        specialist_agent=specialist,
+        persona_type="student",
+        findings=[],
+        risk={"risk_level": "moderate"},
+        draft_plan=_full_plan(),
+        resources=["Campus counseling"],
+    )
+
+    assert attempts["count"] == 3
+    assert result["generation_mode"] == "llm"
+    assert result["burnout_risk_flag"] is True
+    assert result["resources"] == ["Campus counseling", "Peer tutoring"]

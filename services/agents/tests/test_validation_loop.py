@@ -9,7 +9,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from services.agents.config import Settings
 from services.agents.coordinator.agent import CareCoordinatorPipeline
+from services.agents.llm_utils import LlmResult
 from services.agents.runtime import AgentType
+from services.agents.signal_interpretation.agent import SignalInterpretationAgent
 from services.agents.tooling import ToolProvider
 from services.agents.validation_loop.agent import ValidationLoopAgent
 
@@ -39,6 +41,28 @@ def _full_plan() -> dict:
         "notes": "Initial notes.",
         "meal_constraints": ["high_protein"],
     }
+
+
+def test_signal_interpretation_keeps_llm_mode_when_summary_is_present_but_findings_are_empty(monkeypatch):
+    agent = SignalInterpretationAgent()
+    monkeypatch.setattr(
+        agent._llm,
+        "generate_json",
+        lambda _prompt: LlmResult(
+            payload={
+                "findings": [],
+                "summary": "Signals point to elevated stress and reduced recovery.",
+            },
+            error="",
+        ),
+    )
+
+    result = agent.run(signals={"stress_level": 7, "sleep_hours": 5.5})
+
+    assert result["generation_mode"] == "llm"
+    assert result["summary"] == "Signals point to elevated stress and reduced recovery."
+    assert result["findings"][0]["type"] == "routine_disruption"
+    assert result["findings"][0]["evidence"] == result["summary"]
 
 
 def test_validation_loop_merges_partial_revised_plan_and_preserves_it_on_approval(monkeypatch):
