@@ -1,18 +1,19 @@
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import MemberDashboard from "@/pages/MemberDashboard";
 import RecipeListPage from "@/pages/RecipeListPage";
-import type { SupportPlan } from "@/lib/types";
+import type { Recipe, SupportPlan } from "@/lib/types";
 
 const apiMocks = vi.hoisted(() => ({
   getDailyQuota: vi.fn(),
   getRecentSignals: vi.fn(),
   getRuns: vi.fn(),
   getSupportPlan: vi.fn(),
+  logSupportPlanFeedback: vi.fn(),
   getRecipes: vi.fn(),
   getRecommendedRecipes: vi.fn(),
   parseRecipeUrl: vi.fn(),
@@ -196,6 +197,29 @@ const emptyPlan: SupportPlan = {
   },
 };
 
+const recommendedRecipe: Recipe = {
+  id: "101",
+  title: "Spinach Yogurt Bowl",
+  description: "A quick, high-protein bowl with almost no prep.",
+  source_url: "",
+  our_way_notes: "",
+  tags: ["high_protein", "low_prep"],
+  prep_time: 8,
+  cook_time: 0,
+  servings: 1,
+  calories: 320,
+  protein_grams: 24,
+  carbs_grams: 22,
+  fat_grams: 14,
+  fiber_grams: 4,
+  prep_effort: "low",
+  equipment_tags: ["bowl", "spoon"],
+  cost_level: "medium",
+  ingredients: [],
+  ingredient_items: [],
+  instructions: [],
+};
+
 function renderWithProviders(ui: ReactNode) {
   const client = new QueryClient({
     defaultOptions: {
@@ -218,6 +242,7 @@ describe("support-plan pages", () => {
     apiMocks.getRecentSignals.mockResolvedValue([]);
     apiMocks.getRuns.mockResolvedValue([]);
     apiMocks.getSupportPlan.mockResolvedValue(structuredPlan);
+    apiMocks.logSupportPlanFeedback.mockResolvedValue(undefined);
     apiMocks.getRecipes.mockResolvedValue([]);
     apiMocks.getRecommendedRecipes.mockResolvedValue([]);
     apiMocks.parseRecipeUrl.mockResolvedValue(null);
@@ -242,6 +267,56 @@ describe("support-plan pages", () => {
     expect(await screen.findByText("Why this meal fit today")).toBeInTheDocument();
     expect(screen.getByText("Fits current prep capacity")).toBeInTheDocument();
     expect(screen.getByText("Protein Oats · rank 2")).toBeInTheDocument();
+  });
+
+  it("dashboard logs support-plan feedback against the current intervention", async () => {
+    renderWithProviders(<MemberDashboard />);
+
+    expect(await screen.findByText("Risk Drivers")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Accept meal recommendation" }));
+
+    await waitFor(() => {
+      expect(apiMocks.logSupportPlanFeedback.mock.calls[0]?.[0]).toEqual({
+        intervention_id: "77",
+        run_id: "123",
+        event_type: "accepted",
+        source: "member_dashboard",
+        recommendation_kind: "meal",
+        recommendation_id: "88",
+        payload: {
+          recommendation_title: "Turkey and Rice Bowl",
+          support_plan_generated_at: "2026-04-05T12:00:00Z",
+        },
+      });
+    });
+  });
+
+  it("recipe page logs recommended recipe views with intervention context", async () => {
+    apiMocks.getRecommendedRecipes.mockResolvedValue([recommendedRecipe]);
+
+    renderWithProviders(<RecipeListPage />);
+
+    const recipeTitle = await screen.findByText("Spinach Yogurt Bowl");
+    const recipeLink = recipeTitle.closest("a");
+    if (!recipeLink) throw new Error("Expected recommended recipe link");
+    fireEvent.click(recipeLink);
+
+    await waitFor(() => {
+      expect(apiMocks.logSupportPlanFeedback.mock.calls[0]?.[0]).toEqual({
+        intervention_id: "77",
+        run_id: "123",
+        event_type: "viewed",
+        source: "recipe_list_recommended",
+        recommendation_kind: "recipe",
+        recommendation_id: "101",
+        payload: {
+          recipe_title: "Spinach Yogurt Bowl",
+          recipe_rank: 1,
+          support_plan_meal_recipe_id: "88",
+          support_plan_meal_title: "Turkey and Rice Bowl",
+        },
+      });
+    });
   });
 
   it("dashboard renders a fallback state when no structured support plan exists", async () => {

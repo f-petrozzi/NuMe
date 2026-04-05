@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import (
@@ -10,6 +11,7 @@ from models import (
     NormalizedEvent,
     PersonalizationStateSnapshot,
     Recipe,
+    SupportPlanFeedbackEvent,
     WellnessTemplate,
 )
 
@@ -195,3 +197,88 @@ async def test_get_current_support_plan_returns_empty_state_when_no_intervention
     assert body["state_snapshot"] is None
     assert body["risk"]["level"] == "low"
     assert body["risk"]["rationale"] == "No support plan has been generated for this member yet."
+
+
+async def test_create_support_plan_feedback_event_persists_intervention_context(
+    client: AsyncClient,
+    db: AsyncSession,
+):
+    run = AgentRun(user_id=1, normalized_event_id=None, status="completed", risk_level="low")
+    db.add(run)
+    await db.flush()
+
+    intervention = Intervention(
+        user_id=1,
+        run_id=run.id,
+        meal_suggestion="Turkey and Rice Bowl for steady energy.",
+        activity_suggestion="Ten-Minute Reset Walk between classes.",
+        wellness_action="Two-Minute Grounding Reset before dinner.",
+        empathy_message="Keep the plan low-friction today.",
+    )
+    db.add(intervention)
+    await db.commit()
+
+    resp = await client.post(
+        "/api/support-plan/feedback",
+        json={
+            "intervention_id": intervention.id,
+            "event_type": "accepted",
+            "source": "member_dashboard",
+            "recommendation_kind": "meal",
+            "recommendation_id": 88,
+            "payload": {
+                "recommendation_title": "Turkey and Rice Bowl",
+                "support_plan_generated_at": "2026-04-05T12:00:00Z",
+            },
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+    body = resp.json()
+    assert body["user_id"] == 1
+    assert body["run_id"] == run.id
+    assert body["intervention_id"] == intervention.id
+    assert body["event_type"] == "accepted"
+    assert body["payload"]["source"] == "member_dashboard"
+    assert body["payload"]["recommendation_kind"] == "meal"
+    assert body["payload"]["recommendation_id"] == 88
+    assert body["payload"]["recommendation_title"] == "Turkey and Rice Bowl"
+
+    event = (
+        await db.execute(
+            select(SupportPlanFeedbackEvent).where(SupportPlanFeedbackEvent.id == body["id"])
+        )
+    ).scalar_one()
+    assert event.user_id == 1
+    assert event.run_id == run.id
+    assert event.intervention_id == intervention.id
+    assert event.payload["source"] == "member_dashboard"
+
+
+async def test_create_support_plan_feedback_event_rejects_foreign_intervention(
+    client: AsyncClient,
+    db: AsyncSession,
+):
+    intervention = Intervention(
+        user_id=2,
+        meal_suggestion="Foreign plan",
+        activity_suggestion="Foreign activity",
+        wellness_action="Foreign wellness",
+        empathy_message="Not your plan.",
+    )
+    db.add(intervention)
+    await db.commit()
+
+    resp = await client.post(
+        "/api/support-plan/feedback",
+        json={
+            "intervention_id": intervention.id,
+            "event_type": "viewed",
+            "source": "recipe_list_recommended",
+            "recommendation_kind": "recipe",
+            "recommendation_id": 101,
+            "payload": {"recipe_title": "Foreign Recipe"},
+        },
+    )
+    assert resp.status_code == 404, resp.text
+    assert resp.json()["detail"] == "Support plan intervention not found"

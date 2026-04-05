@@ -17,7 +17,16 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 
-import { createRecipe, getRecommendedRecipes, getRecipes, getSupportPlan, parseRecipeText, parseRecipeUrl, type RecipeDraftInput } from "@/lib/api";
+import {
+  createRecipe,
+  getRecommendedRecipes,
+  getRecipes,
+  getSupportPlan,
+  logSupportPlanFeedback,
+  parseRecipeText,
+  parseRecipeUrl,
+  type RecipeDraftInput,
+} from "@/lib/api";
 import type { ParsedRecipeDto } from "@/lib/api-contracts";
 import type { Recipe, SupportPlanAlternative } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -141,6 +150,9 @@ export default function RecipeListPage() {
     queryKey: ["recommended-recipes"],
     queryFn: getRecommendedRecipes,
   });
+  const feedbackMut = useMutation({
+    mutationFn: logSupportPlanFeedback,
+  });
 
   const parseUrlMut = useMutation({
     mutationFn: parseRecipeUrl,
@@ -183,6 +195,24 @@ export default function RecipeListPage() {
   });
 
   const importBusy = parseUrlMut.isPending || parseTextMut.isPending;
+
+  function handleRecommendedRecipeClick(recipe: Recipe, rank: number) {
+    if (!supportPlan?.plan) return;
+    feedbackMut.mutate({
+      intervention_id: supportPlan.plan.intervention_id,
+      run_id: supportPlan.run?.id,
+      event_type: "viewed",
+      source: "recipe_list_recommended",
+      recommendation_kind: "recipe",
+      recommendation_id: recipe.id,
+      payload: {
+        recipe_title: recipe.title,
+        recipe_rank: rank,
+        support_plan_meal_recipe_id: supportPlan.plan.meal.recipe_id,
+        support_plan_meal_title: supportPlan.plan.meal.title,
+      },
+    });
+  }
 
   return (
     <div className="p-6 lg:p-10 max-w-5xl mx-auto space-y-8">
@@ -377,7 +407,12 @@ export default function RecipeListPage() {
         ) : recommendedRecipes.length > 0 ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {recommendedRecipes.map((recipe, index) => (
-              <RecipeCard key={recipe.id} recipe={recipe} index={index} />
+              <RecipeCard
+                key={recipe.id}
+                recipe={recipe}
+                index={index}
+                onClick={() => handleRecommendedRecipeClick(recipe, index + 1)}
+              />
             ))}
           </div>
         ) : (
@@ -767,11 +802,12 @@ function ParsedRecipeReview({
   );
 }
 
-function RecipeCard({ recipe, index }: { recipe: Recipe; index: number }) {
+function RecipeCard({ recipe, index, onClick }: { recipe: Recipe; index: number; onClick?: () => void }) {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.06 }}>
       <Link
         to={`/recipes/${recipe.id}`}
+        onClick={onClick}
         className="block rounded-xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
       >
         <h3 className="mb-1 font-semibold">{recipe.title}</h3>

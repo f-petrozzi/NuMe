@@ -18,11 +18,11 @@ Current execution state as of 2026-04-05:
 - Ticket 6 is complete and verified with `scripts/verify_ticket_06_activity_wellness_planner.sh`
 - Ticket 7 is complete and verified with `scripts/verify_ticket_07_support_plan_endpoint.sh`
 - Ticket 8 is complete and verified with `scripts/verify_ticket_08_frontend_support_plan_cutover.sh`
-- Do not start Ticket 9 or later until explicitly requested
+- Ticket 9 is complete and verified with `scripts/verify_ticket_09_support_plan_feedback_events.sh`
 
 Last verified command:
 
-- `scripts/verify_ticket_08_frontend_support_plan_cutover.sh`
+- `scripts/verify_ticket_09_support_plan_feedback_events.sh`
 
 ## Goal
 

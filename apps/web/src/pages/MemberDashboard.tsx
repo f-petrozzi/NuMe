@@ -1,6 +1,6 @@
 import type { ElementType, ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { getDailyQuota, getRecentSignals, getRuns, getSupportPlan } from "@/lib/api";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { getDailyQuota, getRecentSignals, getRuns, getSupportPlan, logSupportPlanFeedback } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
 import {
@@ -19,9 +19,11 @@ import {
   ArrowRightLeft,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DailyQuotaDto } from "@/lib/api-contracts";
 import type { RiskLevel, SupportPlanAlternative } from "@/lib/types";
+import { useToast } from "@/hooks/use-toast";
 
 const riskConfig: Record<RiskLevel, { label: string; className: string }> = {
   low: { label: "Low Risk", className: "bg-success/10 text-success border-success/20" },
@@ -140,6 +142,7 @@ function QuotaCard({ quota }: { quota: DailyQuotaDto }) {
 
 export default function MemberDashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const { data: quota } = useQuery({
     queryKey: ["dailyQuota"],
     queryFn: getDailyQuota,
@@ -162,6 +165,9 @@ export default function MemberDashboard() {
     refetchInterval: awaitingLatestPlan ? 2000 : false,
   });
   const { data: signals } = useQuery({ queryKey: ["signals"], queryFn: getRecentSignals });
+  const feedbackMutation = useMutation({
+    mutationFn: logSupportPlanFeedback,
+  });
 
   if (!plan) return <DashboardSkeleton />;
 
@@ -175,6 +181,44 @@ export default function MemberDashboard() {
     .map((key) => [key, plan.state_snapshot?.dynamic_state?.[key]] as const)
     .filter((entry) => typeof entry[1] === "number");
   const riskSubscores = Object.entries(plan.risk.subscores).sort((a, b) => b[1] - a[1]);
+
+  function submitRecommendationFeedback(
+    recommendationKind: "meal" | "activity" | "wellness",
+    eventType: "accepted" | "skipped",
+    recommendationId: string | undefined,
+    recommendationTitle: string,
+  ) {
+    if (!currentPlan) return;
+    feedbackMutation.mutate(
+      {
+        intervention_id: currentPlan.intervention_id,
+        run_id: plan.run?.id,
+        event_type: eventType,
+        source: "member_dashboard",
+        recommendation_kind: recommendationKind,
+        recommendation_id: recommendationId,
+        payload: {
+          recommendation_title: recommendationTitle,
+          support_plan_generated_at: plan.generated_at,
+        },
+      },
+      {
+        onSuccess: () => {
+          toast({
+            title: "Feedback saved",
+            description: `${recommendationTitle} marked ${eventType}.`,
+          });
+        },
+        onError: () => {
+          toast({
+            title: "Couldn't save feedback",
+            description: "Try again in a moment.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  }
 
   return (
     <div className="p-6 lg:p-10 max-w-5xl mx-auto space-y-8">
@@ -352,6 +396,14 @@ export default function MemberDashboard() {
               currentPlan.meal.recipe?.protein_grams != null ? `${currentPlan.meal.recipe.protein_grams}g protein` : "",
               currentPlan.meal.recipe?.prep_effort ? `${currentPlan.meal.recipe.prep_effort} effort` : "",
             ].filter(Boolean)}
+            actions={
+              <RecommendationFeedbackActions
+                label="meal"
+                busy={feedbackMutation.isPending}
+                onAccept={() => submitRecommendationFeedback("meal", "accepted", currentPlan.meal.recipe_id, currentPlan.meal.title)}
+                onSkip={() => submitRecommendationFeedback("meal", "skipped", currentPlan.meal.recipe_id, currentPlan.meal.title)}
+              />
+            }
           >
             {currentPlan.meal.recipe ? (
               <div className="rounded-lg border border-primary/10 bg-primary/5 p-3">
@@ -386,6 +438,14 @@ export default function MemberDashboard() {
               currentPlan.activity.intensity ? `${currentPlan.activity.intensity} intensity` : "",
               currentPlan.activity.template?.time_cost_level ? `${currentPlan.activity.template.time_cost_level} time cost` : "",
             ].filter(Boolean)}
+            actions={
+              <RecommendationFeedbackActions
+                label="activity"
+                busy={feedbackMutation.isPending}
+                onAccept={() => submitRecommendationFeedback("activity", "accepted", currentPlan.activity.template_id, currentPlan.activity.title)}
+                onSkip={() => submitRecommendationFeedback("activity", "skipped", currentPlan.activity.template_id, currentPlan.activity.title)}
+              />
+            }
           />
 
           <SupportPlanCard
@@ -400,6 +460,14 @@ export default function MemberDashboard() {
               currentPlan.wellness.template?.duration_minutes ? `${currentPlan.wellness.template.duration_minutes} min` : "",
               currentPlan.wellness.template?.time_cost_level ? `${currentPlan.wellness.template.time_cost_level} time cost` : "",
             ].filter(Boolean)}
+            actions={
+              <RecommendationFeedbackActions
+                label="wellness"
+                busy={feedbackMutation.isPending}
+                onAccept={() => submitRecommendationFeedback("wellness", "accepted", currentPlan.wellness.template_id, currentPlan.wellness.title)}
+                onSkip={() => submitRecommendationFeedback("wellness", "skipped", currentPlan.wellness.template_id, currentPlan.wellness.title)}
+              />
+            }
           />
         </div>
       ) : (
@@ -425,6 +493,7 @@ function SupportPlanCard({
   alternatives,
   meta,
   children,
+  actions,
 }: {
   label: string;
   icon: ElementType;
@@ -434,6 +503,7 @@ function SupportPlanCard({
   alternatives: SupportPlanAlternative[];
   meta: string[];
   children?: ReactNode;
+  actions?: ReactNode;
 }) {
   return (
     <motion.div
@@ -473,6 +543,7 @@ function SupportPlanCard({
       ) : null}
 
       {children ? <div className="mt-4">{children}</div> : null}
+      {actions ? <div className="mt-4">{actions}</div> : null}
 
       {alternatives.length > 0 ? (
         <div className="mt-4 space-y-2">
@@ -485,6 +556,40 @@ function SupportPlanCard({
         </div>
       ) : null}
     </motion.div>
+  );
+}
+
+function RecommendationFeedbackActions({
+  label,
+  busy,
+  onAccept,
+  onSkip,
+}: {
+  label: string;
+  busy: boolean;
+  onAccept: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button
+        size="sm"
+        onClick={onAccept}
+        disabled={busy}
+        aria-label={`Accept ${label} recommendation`}
+      >
+        I'll do this
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onSkip}
+        disabled={busy}
+        aria-label={`Skip ${label} recommendation`}
+      >
+        Not today
+      </Button>
+    </div>
   );
 }
 

@@ -215,6 +215,36 @@ export interface SupportPlanCurrentDto {
   plan?: SupportPlanPlanDto | null;
 }
 
+export type SupportPlanFeedbackEventTypeDto =
+  | "viewed"
+  | "accepted"
+  | "skipped"
+  | "completed"
+  | "recipe_cooked"
+  | "calorie_logged_after_recommendation"
+  | "manual_override";
+export type SupportPlanRecommendationKindDto = "meal" | "activity" | "wellness" | "recipe";
+
+export interface SupportPlanFeedbackEventInDto {
+  intervention_id: number;
+  run_id?: number | null;
+  event_type: SupportPlanFeedbackEventTypeDto;
+  source: string;
+  recommendation_kind: SupportPlanRecommendationKindDto;
+  recommendation_id?: number | null;
+  payload?: Record<string, unknown>;
+}
+
+export interface SupportPlanFeedbackEventDto {
+  id: number;
+  user_id: number;
+  run_id: number | null;
+  intervention_id: number;
+  event_type: SupportPlanFeedbackEventTypeDto;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface CaseDto {
   id: number;
   user_id: number;

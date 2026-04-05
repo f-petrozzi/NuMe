@@ -28,6 +28,24 @@ class PersonalizationStateSnapshot(Base):
     )
 
 
+class SupportPlanFeedbackEvent(Base):
+    __tablename__ = "support_plan_feedback_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    run_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    intervention_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("interventions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class ActivityTemplate(Base):
     __tablename__ = "activity_templates"
 

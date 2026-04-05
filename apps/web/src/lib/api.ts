@@ -17,6 +17,8 @@ import type {
   RunTraceDto,
   ScenarioDto,
   SupportPlanCurrentDto,
+  SupportPlanFeedbackEventDto,
+  SupportPlanFeedbackEventInDto,
   SleepSessionDto,
   WearableEventDto,
   CaseDto,
@@ -71,7 +73,31 @@ export interface RecipeDraftInput {
   photo_filename?: string;
 }
 
+export interface SupportPlanFeedbackInput
+  extends Omit<SupportPlanFeedbackEventInDto, "intervention_id" | "run_id" | "recommendation_id"> {
+  intervention_id: string | number;
+  run_id?: string | number | null;
+  recommendation_id?: string | number | null;
+}
+
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function toRequiredNumber(value: string | number, field: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Invalid ${field}`);
+  }
+  return parsed;
+}
+
+function toOptionalNumber(value: string | number | null | undefined): number | null {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error("Invalid numeric identifier");
+  }
+  return parsed;
+}
 
 async function fetchProfileIfAvailable(): Promise<ProfileDto | null> {
   try {
@@ -137,6 +163,19 @@ async function getRecentSignalsLive(): Promise<Signal[]> {
 async function getSupportPlanLive(): Promise<SupportPlan> {
   const { data } = await apiClient.get<SupportPlanCurrentDto>("/api/support-plan/current");
   return mapSupportPlan(data);
+}
+
+async function logSupportPlanFeedbackLive(input: SupportPlanFeedbackInput): Promise<void> {
+  const payload: SupportPlanFeedbackEventInDto = {
+    intervention_id: toRequiredNumber(input.intervention_id, "intervention_id"),
+    run_id: toOptionalNumber(input.run_id),
+    event_type: input.event_type,
+    source: input.source,
+    recommendation_kind: input.recommendation_kind,
+    recommendation_id: toOptionalNumber(input.recommendation_id),
+    payload: input.payload || {},
+  };
+  await apiClient.post<SupportPlanFeedbackEventDto>("/api/support-plan/feedback", payload);
 }
 
 async function getCasesLive(): Promise<Case[]> {
@@ -230,6 +269,10 @@ async function getRecentSignalsMock(): Promise<Signal[]> {
 async function getSupportPlanMock(): Promise<SupportPlan> {
   await delay(400);
   return mockSupportPlan;
+}
+
+async function logSupportPlanFeedbackMock(_input: SupportPlanFeedbackInput): Promise<void> {
+  await delay(150);
 }
 
 async function getCasesMock(): Promise<Case[]> {
@@ -384,6 +427,10 @@ export async function getRecentSignals(): Promise<Signal[]> {
 
 export async function getSupportPlan(): Promise<SupportPlan> {
   return appConfig.useMockApi ? getSupportPlanMock() : getSupportPlanLive();
+}
+
+export async function logSupportPlanFeedback(input: SupportPlanFeedbackInput): Promise<void> {
+  return appConfig.useMockApi ? logSupportPlanFeedbackMock(input) : logSupportPlanFeedbackLive(input);
 }
 
 export async function getCases(): Promise<Case[]> {

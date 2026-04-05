@@ -12,6 +12,7 @@ import {
   getDailyMetrics,
   getGarminAuthStatus,
   getSleepHistory,
+  logSupportPlanFeedback,
   getSupportPlan,
   refreshSessionUser,
   triggerGarminSync,
@@ -324,6 +325,49 @@ describe("support-plan API", () => {
       reference_id: "17",
       rank: 2,
       score: undefined,
+    });
+  });
+
+  it("logSupportPlanFeedback posts intervention-scoped feedback", async () => {
+    const postSpy = vi.spyOn(apiClient, "post").mockResolvedValueOnce(
+      mockResponse({
+        id: 901,
+        user_id: 1,
+        run_id: 123,
+        intervention_id: 77,
+        event_type: "accepted",
+        payload: {
+          source: "member_dashboard",
+          recommendation_kind: "meal",
+          recommendation_id: 88,
+          recommendation_title: "Turkey and Rice Bowl",
+        },
+        created_at: "2026-04-05T12:05:00Z",
+      }),
+    );
+
+    await logSupportPlanFeedback({
+      intervention_id: "77",
+      run_id: "123",
+      event_type: "accepted",
+      source: "member_dashboard",
+      recommendation_kind: "meal",
+      recommendation_id: "88",
+      payload: {
+        recommendation_title: "Turkey and Rice Bowl",
+      },
+    });
+
+    expect(postSpy).toHaveBeenCalledWith("/api/support-plan/feedback", {
+      intervention_id: 77,
+      run_id: 123,
+      event_type: "accepted",
+      source: "member_dashboard",
+      recommendation_kind: "meal",
+      recommendation_id: 88,
+      payload: {
+        recommendation_title: "Turkey and Rice Bowl",
+      },
     });
   });
 });

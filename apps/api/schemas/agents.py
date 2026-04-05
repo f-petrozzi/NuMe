@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -213,6 +213,40 @@ class SupportPlanCurrentOut(BaseModel):
     state_snapshot: Optional[SupportPlanStateSnapshotOut] = None
     risk: SupportPlanRiskOut
     plan: Optional[SupportPlanPlanOut] = None
+
+
+SupportPlanFeedbackEventType = Literal[
+    "viewed",
+    "accepted",
+    "skipped",
+    "completed",
+    "recipe_cooked",
+    "calorie_logged_after_recommendation",
+    "manual_override",
+]
+SupportPlanRecommendationKind = Literal["meal", "activity", "wellness", "recipe"]
+
+
+class SupportPlanFeedbackEventIn(BaseModel):
+    intervention_id: int
+    run_id: Optional[int] = None
+    event_type: SupportPlanFeedbackEventType
+    source: str = Field(min_length=1, max_length=100)
+    recommendation_kind: SupportPlanRecommendationKind
+    recommendation_id: Optional[int] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SupportPlanFeedbackEventOut(BaseModel):
+    id: int
+    user_id: int
+    run_id: Optional[int] = None
+    intervention_id: int
+    event_type: SupportPlanFeedbackEventType
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class NotificationOut(BaseModel):

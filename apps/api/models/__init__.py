@@ -9,7 +9,12 @@ from models.health import (
     HealthSleepSession,
     HealthSyncRun,
 )
-from models.personalization import ActivityTemplate, PersonalizationStateSnapshot, WellnessTemplate
+from models.personalization import (
+    ActivityTemplate,
+    PersonalizationStateSnapshot,
+    SupportPlanFeedbackEvent,
+    WellnessTemplate,
+)
 from models.rate_limit import AIRateCounter
 from models.recipes import MealPlanSlot, Recipe
 
@@ -19,7 +24,7 @@ __all__ = [
     "WearableEvent", "BehaviorEvent", "NormalizedEvent",
     "AgentRun", "AgentMessage", "Case", "Intervention", "Notification", "Resource", "AuditLog",
     "HealthDailyMetrics", "HealthSleepSession", "HealthActivity", "HealthSyncRun", "HealthCalorieLog",
-    "PersonalizationStateSnapshot", "ActivityTemplate", "WellnessTemplate",
+    "PersonalizationStateSnapshot", "SupportPlanFeedbackEvent", "ActivityTemplate", "WellnessTemplate",
     "AIRateCounter",
     "Recipe", "MealPlanSlot",
 ]
