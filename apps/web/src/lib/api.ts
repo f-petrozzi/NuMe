@@ -10,13 +10,13 @@ import type {
   DailyQuotaDto,
   GarminAuthStatusDto,
   HealthOverviewDto,
-  InterventionDto,
   OnboardingRequestDto,
   ParsedRecipeDto,
   ProfileDto,
   RecipeDto,
   RunTraceDto,
   ScenarioDto,
+  SupportPlanCurrentDto,
   SleepSessionDto,
   WearableEventDto,
   CaseDto,
@@ -24,10 +24,10 @@ import type {
 import {
   mapCase,
   mapHealthOverviewToSummary,
-  mapInterventionToSupportPlan,
   mapRecipe,
   mapRunTrace,
   mapScenario,
+  mapSupportPlan,
   mapUserFromBackend,
   mapWearableEventToSignal,
 } from "@/lib/api-mappers";
@@ -135,25 +135,8 @@ async function getRecentSignalsLive(): Promise<Signal[]> {
 }
 
 async function getSupportPlanLive(): Promise<SupportPlan> {
-  const [{ data: interventions }, { data: runs }] = await Promise.all([
-    apiClient.get<InterventionDto[]>("/api/interventions"),
-    apiClient.get<AgentRunDto[]>("/api/runs"),
-  ]);
-
-  const latestIntervention = interventions[0];
-  if (!latestIntervention) {
-    return {
-      meal: { title: "Meal Suggestion", description: "Run a scenario or submit a check-in to generate recommendations.", priority: "medium" },
-      activity: { title: "Activity Suggestion", description: "Your next support plan will appear here.", priority: "medium" },
-      wellness: { title: "Wellness Action", description: "NüMe will add an empathy-first action here once a run completes.", priority: "high" },
-      empathy_message: "Your support plan will appear here after the first completed run.",
-      risk_level: "low",
-    };
-  }
-
-  const matchingRun = runs.find((run) => run.id === latestIntervention.run_id);
-  const riskLevel = matchingRun?.risk_level || "low";
-  return mapInterventionToSupportPlan(latestIntervention, riskLevel || "low");
+  const { data } = await apiClient.get<SupportPlanCurrentDto>("/api/support-plan/current");
+  return mapSupportPlan(data);
 }
 
 async function getCasesLive(): Promise<Case[]> {

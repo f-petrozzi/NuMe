@@ -67,11 +67,17 @@ class InterventionDraft(Dumpable):
     meal_suggestion: MealSuggestion
     activity_suggestion: ActivitySuggestion
     wellness_action: WellnessAction
+    recipe_id: Optional[int] = None
+    activity_template_id: Optional[int] = None
+    wellness_template_id: Optional[int] = None
     generation_mode: str = "fallback"
     generation_error: str = ""
     resources: List[str] = field(default_factory=list)
     notes: str = ""
     meal_constraints: List[str] = field(default_factory=list)
+    why_chosen: Dict[str, List[str]] = field(default_factory=dict)
+    alternatives_considered: List[Dict[str, Any]] = field(default_factory=list)
+    why_changed_from_previous: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -116,7 +122,13 @@ class FinalPlan(Dumpable):
     wellness_action: str
     empathy_message: str
     risk_level: str
+    recipe_id: Optional[int] = None
+    activity_template_id: Optional[int] = None
+    wellness_template_id: Optional[int] = None
     generation_mode: str = "fallback"
     generation_error: str = ""
     resources: List[str] = field(default_factory=list)
     notes: str = ""
+    why_chosen: Dict[str, List[str]] = field(default_factory=dict)
+    alternatives_considered: List[Dict[str, Any]] = field(default_factory=list)
+    why_changed_from_previous: List[str] = field(default_factory=list)

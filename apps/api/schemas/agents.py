@@ -90,6 +90,131 @@ class RunTraceOut(BaseModel):
     case: Optional[CaseOut] = None
 
 
+class SupportPlanRunOut(BaseModel):
+    id: int
+    status: str
+    risk_level: str
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    normalized_event_id: Optional[int] = None
+
+
+class SupportPlanStateSnapshotOut(BaseModel):
+    id: int
+    run_id: Optional[int] = None
+    source: str
+    created_at: datetime
+    dynamic_state: Dict[str, Any] = Field(default_factory=dict)
+    archetype_scores: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SupportPlanRiskOut(BaseModel):
+    level: str = "low"
+    urgency: str = "routine"
+    confidence: float = 0.0
+    subscores: Dict[str, Any] = Field(default_factory=dict)
+    drivers: List[str] = Field(default_factory=list)
+    rationale: str = ""
+
+
+class SupportPlanRecipeOut(BaseModel):
+    id: int
+    title: str
+    description: str
+    tags: List[str] = Field(default_factory=list)
+    prep_minutes: int
+    cook_minutes: int
+    calories: Optional[int] = None
+    protein_grams: Optional[float] = None
+    carbs_grams: Optional[float] = None
+    fat_grams: Optional[float] = None
+    fiber_grams: Optional[float] = None
+    prep_effort: Optional[str] = None
+    cost_level: Optional[str] = None
+    equipment_tags: List[str] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
+
+
+class SupportPlanActivityTemplateOut(BaseModel):
+    id: int
+    title: str
+    description: str
+    duration_minutes: int
+    intensity: str
+    accessibility_tags: List[str] = Field(default_factory=list)
+    equipment_tags: List[str] = Field(default_factory=list)
+    time_cost_level: str
+    fatigue_sensitivity: str
+    contraindication_tags: List[str] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SupportPlanWellnessTemplateOut(BaseModel):
+    id: int
+    title: str
+    description: str
+    category: str
+    duration_minutes: int
+    accessibility_tags: List[str] = Field(default_factory=list)
+    time_cost_level: str
+    fatigue_sensitivity: str
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SupportPlanMealOut(BaseModel):
+    recipe_id: Optional[int] = None
+    title: str
+    description: str
+    text: str = ""
+    constraints: List[str] = Field(default_factory=list)
+    why_chosen: List[str] = Field(default_factory=list)
+    alternatives_considered: List[Any] = Field(default_factory=list)
+    recipe: Optional[SupportPlanRecipeOut] = None
+
+
+class SupportPlanActivityOut(BaseModel):
+    template_id: Optional[int] = None
+    title: str
+    description: str
+    text: str = ""
+    duration_minutes: Optional[int] = None
+    intensity: Optional[str] = None
+    why_chosen: List[str] = Field(default_factory=list)
+    alternatives_considered: List[Any] = Field(default_factory=list)
+    template: Optional[SupportPlanActivityTemplateOut] = None
+
+
+class SupportPlanWellnessOut(BaseModel):
+    template_id: Optional[int] = None
+    title: str
+    description: str
+    text: str = ""
+    category: Optional[str] = None
+    why_chosen: List[str] = Field(default_factory=list)
+    alternatives_considered: List[Any] = Field(default_factory=list)
+    template: Optional[SupportPlanWellnessTemplateOut] = None
+
+
+class SupportPlanPlanOut(BaseModel):
+    intervention_id: int
+    created_at: datetime
+    meal: SupportPlanMealOut
+    activity: SupportPlanActivityOut
+    wellness: SupportPlanWellnessOut
+    empathy_message: str
+    rationale: str = ""
+    why_changed_from_previous: List[str] = Field(default_factory=list)
+
+
+class SupportPlanCurrentOut(BaseModel):
+    generated_at: datetime
+    run: Optional[SupportPlanRunOut] = None
+    state_snapshot: Optional[SupportPlanStateSnapshotOut] = None
+    risk: SupportPlanRiskOut
+    plan: Optional[SupportPlanPlanOut] = None
+
+
 class NotificationOut(BaseModel):
     id: int
     user_id: int

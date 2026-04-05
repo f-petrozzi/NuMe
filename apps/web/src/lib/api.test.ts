@@ -12,6 +12,7 @@ import {
   getDailyMetrics,
   getGarminAuthStatus,
   getSleepHistory,
+  getSupportPlan,
   refreshSessionUser,
   triggerGarminSync,
 } from "@/lib/api";
@@ -222,5 +223,107 @@ describe("refreshSessionUser", () => {
     });
     expect(getSpy).toHaveBeenCalledTimes(2);
     expect(localStorage.getItem(storageKeys.user)).toBe(JSON.stringify(user));
+  });
+});
+
+describe("support-plan API", () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it("getSupportPlan uses the structured support-plan endpoint", async () => {
+    const getSpy = vi.spyOn(apiClient, "get").mockResolvedValueOnce(
+      mockResponse({
+        generated_at: "2026-04-05T12:00:00Z",
+        run: {
+          id: 123,
+          status: "completed",
+          risk_level: "moderate",
+          started_at: "2026-04-05T11:58:00Z",
+          completed_at: "2026-04-05T12:00:00Z",
+          normalized_event_id: 45,
+        },
+        state_snapshot: {
+          id: 45,
+          run_id: 123,
+          source: "live_checkin",
+          created_at: "2026-04-05T11:57:00Z",
+          dynamic_state: { sleep_debt: 0.62, stress_load: 0.71 },
+          archetype_scores: { student_overload: 0.74 },
+        },
+        risk: {
+          level: "moderate",
+          urgency: "next_day",
+          confidence: 0.83,
+          subscores: { physiological_strain: 0.71, recovery_debt: 0.78 },
+          drivers: ["Sleep has been below baseline for three days."],
+          rationale: "Moderate risk driven mostly by recovery debt and physiological strain.",
+        },
+        plan: {
+          intervention_id: 77,
+          created_at: "2026-04-05T12:00:00Z",
+          meal: {
+            recipe_id: 88,
+            title: "Turkey and Rice Bowl",
+            description: "High-protein, low-prep lunch",
+            text: "High-protein, low-prep lunch",
+            constraints: ["high_protein", "low_prep"],
+            why_chosen: ["Fits current prep capacity"],
+            alternatives_considered: [{ kind: "meal", title: "Protein Oats", rank: 2, recipe_id: 17 }],
+            recipe: {
+              id: 88,
+              title: "Turkey and Rice Bowl",
+              description: "High-protein, low-prep lunch",
+              tags: ["high_protein"],
+              prep_minutes: 10,
+              cook_minutes: 15,
+              calories: 420,
+              protein_grams: 32,
+              carbs_grams: 45,
+              fat_grams: 12,
+              fiber_grams: 6,
+              prep_effort: "low",
+              cost_level: "medium",
+              equipment_tags: ["pan"],
+            },
+          },
+          activity: {
+            template_id: 5,
+            title: "Ten-Minute Reset Walk",
+            description: "Short walk",
+            text: "Short walk",
+            duration_minutes: 10,
+            intensity: "low",
+            why_chosen: [],
+            alternatives_considered: [],
+            template: null,
+          },
+          wellness: {
+            template_id: 11,
+            title: "Two-Minute Grounding Reset",
+            description: "Grounding reset",
+            text: "Grounding reset",
+            category: "grounding",
+            why_chosen: [],
+            alternatives_considered: [],
+            template: null,
+          },
+          empathy_message: "Today looks heavier than usual, so the plan stays deliberately low-friction.",
+          rationale: "Low-prep, low-friction choices selected to support recovery and consistency.",
+          why_changed_from_previous: ["Recovery score fell"],
+        },
+      }),
+    );
+
+    const result = await getSupportPlan();
+
+    expect(getSpy).toHaveBeenCalledWith("/api/support-plan/current");
+    expect(result.risk.level).toBe("moderate");
+    expect(result.plan?.meal.recipe?.title).toBe("Turkey and Rice Bowl");
+    expect(result.plan?.meal.alternatives_considered[0]).toEqual({
+      kind: "meal",
+      title: "Protein Oats",
+      reference_id: "17",
+      rank: 2,
+      score: undefined,
+    });
   });
 });

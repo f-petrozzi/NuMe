@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import (
+    ActivityTemplate,
     AgentMessage,
     AgentRun,
     Case,
@@ -24,6 +25,7 @@ from models import (
     Recipe,
     User,
     UserProfile,
+    WellnessTemplate,
     WearableEvent,
 )
 
@@ -316,10 +318,38 @@ async def test_intervention_creation_persists_structured_metadata(
         feature_windows={"7d": {"sleep_hours_avg": 5.8}},
         inputs_summary={"recent_checkins": 2},
     )
+    activity_template = ActivityTemplate(
+        id=7,
+        title="Reset Walk",
+        description="Short, low-pressure walk",
+        duration_minutes=10,
+        intensity="low",
+        accessibility_tags=["low_energy_friendly"],
+        equipment_tags=[],
+        time_cost_level="low",
+        fatigue_sensitivity="high",
+        contraindication_tags=[],
+        metadata_json={"goal_tags": ["stress_reduction"]},
+        active=True,
+    )
+    wellness_template = WellnessTemplate(
+        id=11,
+        title="Grounding Reset",
+        description="Two-minute grounding prompt",
+        category="grounding",
+        duration_minutes=2,
+        accessibility_tags=["low_energy_friendly"],
+        time_cost_level="low",
+        fatigue_sensitivity="high",
+        metadata_json={"goal_tags": ["stress_reduction"]},
+        active=True,
+    )
     recipe = Recipe(user_id=1, title="Protein Bowl", description="Quick lunch")
-    db.add_all([snapshot, recipe])
+    db.add_all([snapshot, activity_template, wellness_template, recipe])
     await db.commit()
     await db.refresh(snapshot)
+    await db.refresh(activity_template)
+    await db.refresh(wellness_template)
     await db.refresh(recipe)
 
     create_resp = await client.post(
@@ -363,6 +393,35 @@ async def test_intervention_creation_persists_structured_metadata(
     assert persisted.why_chosen == {"meal": ["Fits prep capacity", "Improves protein coverage"]}
     assert persisted.alternatives_considered == [17, 23]
     assert persisted.why_changed_from_previous == ["Recovery score fell compared with yesterday"]
+
+
+async def test_intervention_creation_rejects_unknown_catalog_template_ids(
+    client: AsyncClient, db: AsyncSession
+):
+    norm = NormalizedEvent(user_id=1, signals={"stress_level": "6"}, summary="stress 6/10")
+    db.add(norm)
+    await db.flush()
+
+    run = AgentRun(user_id=1, normalized_event_id=norm.id, status="completed", risk_level="moderate")
+    db.add(run)
+    await db.commit()
+    await db.refresh(run)
+
+    create_resp = await client.post(
+        "/api/interventions",
+        json={
+            "user_id": 1,
+            "run_id": run.id,
+            "activity_template_id": 9999,
+            "wellness_template_id": 8888,
+            "meal_suggestion": "Protein-forward lunch",
+            "activity_suggestion": "10-minute reset walk",
+            "wellness_action": "Two-minute grounding reset",
+            "empathy_message": "Keep the plan simple today.",
+        },
+    )
+    assert create_resp.status_code == 404, create_resp.text
+    assert create_resp.json()["detail"] == "Activity template not found"
 
 
 # ---------------------------------------------------------------------------

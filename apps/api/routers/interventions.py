@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth import get_current_user, is_staff
 from database import get_db
 from models.agents import AgentRun, Intervention
-from models.personalization import PersonalizationStateSnapshot
+from models.personalization import ActivityTemplate, PersonalizationStateSnapshot, WellnessTemplate
 from models.recipes import Recipe
 from models.user import User
 from schemas.agents import InterventionOut
@@ -76,6 +76,16 @@ async def _validate_related_records(
             raise HTTPException(status_code=404, detail="Recipe not found")
         if recipe.user_id not in {None, target_user_id}:
             raise HTTPException(status_code=403, detail="Recipe does not belong to the target user")
+
+    if body.activity_template_id is not None:
+        activity_template = await db.get(ActivityTemplate, body.activity_template_id)
+        if activity_template is None or not activity_template.active:
+            raise HTTPException(status_code=404, detail="Activity template not found")
+
+    if body.wellness_template_id is not None:
+        wellness_template = await db.get(WellnessTemplate, body.wellness_template_id)
+        if wellness_template is None or not wellness_template.active:
+            raise HTTPException(status_code=404, detail="Wellness template not found")
 
 
 @router.post("", response_model=InterventionOut, status_code=201)

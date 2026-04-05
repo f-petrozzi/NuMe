@@ -7,6 +7,13 @@ import type {
   RecipeDto,
   RunTraceDto,
   ScenarioDto,
+  SupportPlanActivityDto,
+  SupportPlanActivityTemplateDto,
+  SupportPlanCurrentDto,
+  SupportPlanMealDto,
+  SupportPlanRecipeDto,
+  SupportPlanWellnessDto,
+  SupportPlanWellnessTemplateDto,
   WearableEventDto,
   AuthMeDto,
 } from "@/lib/api-contracts";
@@ -17,12 +24,12 @@ import type {
   Case,
   FinalAction,
   HealthSummary,
-  InterventionCard,
   PersonaType,
   Recipe,
   RecipeIngredient,
   Scenario,
   Signal,
+  SupportPlanAlternative,
   SupportPlan,
   User,
 } from "@/lib/types";
@@ -107,8 +114,9 @@ function summarizeAgentOutput(output: Record<string, unknown>): string {
   return fallback || "Agent step completed.";
 }
 
-function buildCard(title: string, description: string, priority: InterventionCard["priority"]): InterventionCard {
-  return { title, description, priority };
+function normalizeRiskLevel(value: string | undefined | null): SupportPlan["risk"]["level"] {
+  if (value === "moderate" || value === "high" || value === "critical") return value;
+  return "low";
 }
 
 function computeSleepQuality(score: number): string {
@@ -121,6 +129,70 @@ function computeSleepQuality(score: number): string {
 function normalizePersona(persona: PersonaType | undefined): PersonaType | undefined {
   if (!persona) return undefined;
   return persona;
+}
+
+function normalizeNumberRecord(values: Record<string, unknown> | undefined | null): Record<string, number> {
+  const normalized: Record<string, number> = {};
+  for (const [key, value] of Object.entries(values || {})) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) normalized[key] = parsed;
+  }
+  return normalized;
+}
+
+function toOptionalStringId(value: unknown): string | undefined {
+  return value == null ? undefined : String(value);
+}
+
+function normalizeStringList(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return values
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+}
+
+function normalizeAlternative(
+  value: unknown,
+  fallbackKind: SupportPlanAlternative["kind"],
+): SupportPlanAlternative | null {
+  if (typeof value === "number" || typeof value === "string") {
+    const referenceId = String(value);
+    return {
+      kind: fallbackKind,
+      title: `${titleCaseWords(fallbackKind)} Alternative #${referenceId}`,
+      reference_id: referenceId,
+    };
+  }
+
+  if (!value || typeof value !== "object") return null;
+
+  const item = value as Record<string, unknown>;
+  const kindValue = String(item.kind || fallbackKind).trim().toLowerCase();
+  const kind: SupportPlanAlternative["kind"] =
+    kindValue === "meal" || kindValue === "activity" || kindValue === "wellness" ? kindValue : "unknown";
+  const referenceId = toOptionalStringId(item.recipe_id ?? item.template_id ?? item.id);
+  const rank = Number(item.rank);
+  const score = Number(item.score);
+  const title =
+    String(item.title || "").trim() ||
+    (referenceId ? `${titleCaseWords(kind)} Alternative #${referenceId}` : `${titleCaseWords(kind)} Alternative`);
+
+  return {
+    kind,
+    title,
+    reference_id: referenceId,
+    rank: Number.isFinite(rank) ? rank : undefined,
+    score: Number.isFinite(score) ? score : undefined,
+  };
+}
+
+function normalizeAlternatives(
+  values: unknown[] | null | undefined,
+  fallbackKind: SupportPlanAlternative["kind"],
+): SupportPlanAlternative[] {
+  return (values || [])
+    .map((value) => normalizeAlternative(value, fallbackKind))
+    .filter((value): value is SupportPlanAlternative => value !== null);
 }
 
 function normalizeRecipeIngredient(ingredient: RecipeDto["ingredients"][number]): RecipeIngredient {
@@ -175,6 +247,98 @@ function groupRecipeInstructions(instructions: string): Recipe["instructions"] {
 
   flush();
   return groups.length > 0 ? groups : [{ group: "Steps", steps: instructions.split("\n").filter(Boolean) }];
+}
+
+function mapSupportPlanRecipe(recipe: SupportPlanRecipeDto) {
+  return {
+    id: String(recipe.id),
+    title: recipe.title,
+    description: recipe.description,
+    tags: recipe.tags || [],
+    prep_time: recipe.prep_minutes,
+    cook_time: recipe.cook_minutes,
+    calories: recipe.calories ?? null,
+    protein_grams: recipe.protein_grams ?? null,
+    carbs_grams: recipe.carbs_grams ?? null,
+    fat_grams: recipe.fat_grams ?? null,
+    fiber_grams: recipe.fiber_grams ?? null,
+    prep_effort: recipe.prep_effort ?? null,
+    cost_level: recipe.cost_level ?? null,
+    equipment_tags: recipe.equipment_tags ?? [],
+  };
+}
+
+function mapSupportPlanActivityTemplate(template: SupportPlanActivityTemplateDto) {
+  return {
+    id: String(template.id),
+    title: template.title,
+    description: template.description,
+    duration_minutes: template.duration_minutes,
+    intensity: template.intensity,
+    accessibility_tags: template.accessibility_tags ?? [],
+    equipment_tags: template.equipment_tags ?? [],
+    time_cost_level: template.time_cost_level,
+    fatigue_sensitivity: template.fatigue_sensitivity,
+    contraindication_tags: template.contraindication_tags ?? [],
+    metadata: template.metadata ?? {},
+  };
+}
+
+function mapSupportPlanWellnessTemplate(template: SupportPlanWellnessTemplateDto) {
+  return {
+    id: String(template.id),
+    title: template.title,
+    description: template.description,
+    category: template.category,
+    duration_minutes: template.duration_minutes,
+    accessibility_tags: template.accessibility_tags ?? [],
+    time_cost_level: template.time_cost_level,
+    fatigue_sensitivity: template.fatigue_sensitivity,
+    metadata: template.metadata ?? {},
+  };
+}
+
+function mapSupportPlanMeal(meal: SupportPlanMealDto) {
+  return {
+    recipe_id: toOptionalStringId(meal.recipe_id),
+    title: meal.title,
+    description: meal.description,
+    text: meal.text,
+    constraints: normalizeStringList(meal.constraints),
+    why_chosen: normalizeStringList(meal.why_chosen),
+    alternatives_considered: normalizeAlternatives(meal.alternatives_considered, "meal"),
+    recipe: meal.recipe ? mapSupportPlanRecipe(meal.recipe) : undefined,
+  };
+}
+
+function mapSupportPlanActivity(activity: SupportPlanActivityDto) {
+  return {
+    template_id: toOptionalStringId(activity.template_id),
+    title: activity.title,
+    description: activity.description,
+    text: activity.text,
+    duration_minutes:
+      typeof activity.duration_minutes === "number" && Number.isFinite(activity.duration_minutes)
+        ? activity.duration_minutes
+        : undefined,
+    intensity: activity.intensity || undefined,
+    why_chosen: normalizeStringList(activity.why_chosen),
+    alternatives_considered: normalizeAlternatives(activity.alternatives_considered, "activity"),
+    template: activity.template ? mapSupportPlanActivityTemplate(activity.template) : undefined,
+  };
+}
+
+function mapSupportPlanWellness(wellness: SupportPlanWellnessDto) {
+  return {
+    template_id: toOptionalStringId(wellness.template_id),
+    title: wellness.title,
+    description: wellness.description,
+    text: wellness.text,
+    category: wellness.category || undefined,
+    why_chosen: normalizeStringList(wellness.why_chosen),
+    alternatives_considered: normalizeAlternatives(wellness.alternatives_considered, "wellness"),
+    template: wellness.template ? mapSupportPlanWellnessTemplate(wellness.template) : undefined,
+  };
 }
 
 export function mapUserFromBackend(me: AuthMeDto, profile?: ProfileDto | null, fallbackName?: string): User {
@@ -260,16 +424,49 @@ function mapFinalAction(intervention: InterventionDto): FinalAction {
   };
 }
 
-export function mapInterventionToSupportPlan(
-  intervention: InterventionDto,
-  riskLevel: SupportPlan["risk_level"] = "low",
-): SupportPlan {
+export function mapSupportPlan(dto: SupportPlanCurrentDto): SupportPlan {
   return {
-    meal: buildCard("Meal Suggestion", intervention.meal_suggestion || "No meal suggestion yet.", "medium"),
-    activity: buildCard("Activity Suggestion", intervention.activity_suggestion || "No activity suggestion yet.", "medium"),
-    wellness: buildCard("Wellness Action", intervention.wellness_action || "No wellness action yet.", "high"),
-    empathy_message: intervention.empathy_message || "Your care plan is being prepared.",
-    risk_level: riskLevel,
+    generated_at: dto.generated_at,
+    run: dto.run
+      ? {
+          id: String(dto.run.id),
+          status: dto.run.status,
+          risk_level: normalizeRiskLevel(dto.run.risk_level),
+          started_at: dto.run.started_at,
+          completed_at: dto.run.completed_at || undefined,
+          normalized_event_id: toOptionalStringId(dto.run.normalized_event_id),
+        }
+      : undefined,
+    state_snapshot: dto.state_snapshot
+      ? {
+          id: String(dto.state_snapshot.id),
+          run_id: toOptionalStringId(dto.state_snapshot.run_id),
+          source: dto.state_snapshot.source,
+          created_at: dto.state_snapshot.created_at,
+          dynamic_state: dto.state_snapshot.dynamic_state || {},
+          archetype_scores: normalizeNumberRecord(dto.state_snapshot.archetype_scores),
+        }
+      : undefined,
+    risk: {
+      level: normalizeRiskLevel(dto.risk.level),
+      urgency: dto.risk.urgency || "routine",
+      confidence: Number.isFinite(Number(dto.risk.confidence)) ? Number(dto.risk.confidence) : 0,
+      subscores: normalizeNumberRecord(dto.risk.subscores),
+      drivers: normalizeStringList(dto.risk.drivers),
+      rationale: dto.risk.rationale || "",
+    },
+    plan: dto.plan
+      ? {
+          intervention_id: String(dto.plan.intervention_id),
+          created_at: dto.plan.created_at,
+          meal: mapSupportPlanMeal(dto.plan.meal),
+          activity: mapSupportPlanActivity(dto.plan.activity),
+          wellness: mapSupportPlanWellness(dto.plan.wellness),
+          empathy_message: dto.plan.empathy_message,
+          rationale: dto.plan.rationale || "",
+          why_changed_from_previous: normalizeStringList(dto.plan.why_changed_from_previous),
+        }
+      : undefined,
   };
 }
 

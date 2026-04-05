@@ -84,6 +84,7 @@ from routers.health import router as health_router
 from routers.personalization import router as personalization_router
 from routers.recipes import router as recipes_router
 from routers.scenarios import router as scenarios_router
+from routers.support_plan import router as support_plan_router
 from routers.audit import router as audit_router
 from routers.demo import router as demo_router
 from routers.quota import router as quota_router
@@ -100,6 +101,7 @@ app.include_router(health_router)
 app.include_router(personalization_router)
 app.include_router(recipes_router)
 app.include_router(scenarios_router)
+app.include_router(support_plan_router)
 app.include_router(audit_router)
 app.include_router(demo_router)
 app.include_router(quota_router)

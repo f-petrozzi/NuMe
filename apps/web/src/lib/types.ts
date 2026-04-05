@@ -43,19 +43,135 @@ export interface Signal {
   recorded_at: string;
 }
 
-export interface SupportPlan {
-  meal: InterventionCard;
-  activity: InterventionCard;
-  wellness: InterventionCard;
-  empathy_message: string;
-  risk_level: RiskLevel;
-  confidence?: number;
+export interface SupportPlanAlternative {
+  kind: "meal" | "activity" | "wellness" | "unknown";
+  title: string;
+  rank?: number;
+  score?: number;
+  reference_id?: string;
 }
 
-export interface InterventionCard {
+export interface SupportPlanRecipeSummary {
+  id: string;
   title: string;
   description: string;
-  priority: "low" | "medium" | "high";
+  tags: string[];
+  prep_time: number;
+  cook_time: number;
+  calories?: number | null;
+  protein_grams?: number | null;
+  carbs_grams?: number | null;
+  fat_grams?: number | null;
+  fiber_grams?: number | null;
+  prep_effort?: string | null;
+  cost_level?: string | null;
+  equipment_tags: string[];
+}
+
+export interface SupportPlanActivityTemplate {
+  id: string;
+  title: string;
+  description: string;
+  duration_minutes: number;
+  intensity: string;
+  accessibility_tags: string[];
+  equipment_tags: string[];
+  time_cost_level: string;
+  fatigue_sensitivity: string;
+  contraindication_tags: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface SupportPlanWellnessTemplate {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  duration_minutes: number;
+  accessibility_tags: string[];
+  time_cost_level: string;
+  fatigue_sensitivity: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface SupportPlanMeal {
+  recipe_id?: string;
+  title: string;
+  description: string;
+  text: string;
+  constraints: string[];
+  why_chosen: string[];
+  alternatives_considered: SupportPlanAlternative[];
+  recipe?: SupportPlanRecipeSummary;
+}
+
+export interface SupportPlanActivity {
+  template_id?: string;
+  title: string;
+  description: string;
+  text: string;
+  duration_minutes?: number;
+  intensity?: string;
+  why_chosen: string[];
+  alternatives_considered: SupportPlanAlternative[];
+  template?: SupportPlanActivityTemplate;
+}
+
+export interface SupportPlanWellness {
+  template_id?: string;
+  title: string;
+  description: string;
+  text: string;
+  category?: string;
+  why_chosen: string[];
+  alternatives_considered: SupportPlanAlternative[];
+  template?: SupportPlanWellnessTemplate;
+}
+
+export interface SupportPlanRun {
+  id: string;
+  status: RunStatus;
+  risk_level: RiskLevel;
+  started_at: string;
+  completed_at?: string;
+  normalized_event_id?: string;
+}
+
+export interface SupportPlanStateSnapshot {
+  id: string;
+  run_id?: string;
+  source: string;
+  created_at: string;
+  dynamic_state: Record<string, unknown>;
+  archetype_scores: Record<string, number>;
+}
+
+export interface SupportPlanRisk {
+  level: RiskLevel;
+  urgency: string;
+  confidence: number;
+  subscores: Record<string, number>;
+  drivers: string[];
+  rationale: string;
+}
+
+export interface SupportPlanPlan {
+  intervention_id: string;
+  created_at: string;
+  meal: SupportPlanMeal;
+  activity: SupportPlanActivity;
+  wellness: SupportPlanWellness;
+  empathy_message: string;
+  rationale: string;
+  why_changed_from_previous: string[];
+}
+
+export interface SupportPlan {
+  generated_at: string;
+  run?: SupportPlanRun;
+  state_snapshot?: SupportPlanStateSnapshot;
+  risk: SupportPlanRisk;
+  plan?: SupportPlanPlan;
 }
 
 export interface Case {

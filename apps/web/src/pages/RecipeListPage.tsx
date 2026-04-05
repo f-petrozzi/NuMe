@@ -17,9 +17,9 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 
-import { createRecipe, getRecommendedRecipes, getRecipes, parseRecipeText, parseRecipeUrl, type RecipeDraftInput } from "@/lib/api";
+import { createRecipe, getRecommendedRecipes, getRecipes, getSupportPlan, parseRecipeText, parseRecipeUrl, type RecipeDraftInput } from "@/lib/api";
 import type { ParsedRecipeDto } from "@/lib/api-contracts";
-import type { Recipe } from "@/lib/types";
+import type { Recipe, SupportPlanAlternative } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -132,6 +132,10 @@ export default function RecipeListPage() {
   const { data: recipes = [], isLoading: recipesLoading } = useQuery({
     queryKey: ["recipes"],
     queryFn: getRecipes,
+  });
+  const { data: supportPlan, isLoading: supportPlanLoading } = useQuery({
+    queryKey: ["supportPlan"],
+    queryFn: getSupportPlan,
   });
   const { data: recommendedRecipes = [], isLoading: recommendedLoading } = useQuery({
     queryKey: ["recommended-recipes"],
@@ -256,10 +260,117 @@ export default function RecipeListPage() {
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
+          <h2 className="text-lg font-semibold">Current Meal Recommendation Context</h2>
+        </div>
+        {supportPlanLoading ? (
+          <div className="h-44 animate-pulse rounded-xl bg-muted" />
+        ) : supportPlan?.plan ? (
+          <Card className="border-primary/15 bg-primary/5">
+            <CardHeader className="space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-2">
+                  <CardTitle className="text-lg">{supportPlan.plan.meal.title}</CardTitle>
+                  <CardDescription>{supportPlan.plan.meal.text || supportPlan.plan.meal.description}</CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline">{supportPlan.risk.level} risk</Badge>
+                  {supportPlan.plan.meal.recipe ? (
+                    <Badge variant="secondary">
+                      {supportPlan.plan.meal.recipe.prep_time + supportPlan.plan.meal.recipe.cook_time} min total
+                    </Badge>
+                  ) : null}
+                </div>
+              </div>
+              {supportPlan.plan.rationale ? (
+                <p className="text-sm text-muted-foreground">{supportPlan.plan.rationale}</p>
+              ) : null}
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {supportPlan.plan.meal.recipe ? (
+                <div className="rounded-xl border border-border/80 bg-background p-4">
+                  <div className="flex items-center gap-2">
+                    <UtensilsCrossed className="h-4 w-4 text-primary" />
+                    <p className="text-sm font-semibold">Selected Recipe</p>
+                  </div>
+                  <p className="mt-2 font-medium">{supportPlan.plan.meal.recipe.title}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{supportPlan.plan.meal.recipe.description}</p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    {supportPlan.plan.meal.recipe.protein_grams != null ? (
+                      <span>{supportPlan.plan.meal.recipe.protein_grams}g protein</span>
+                    ) : null}
+                    {supportPlan.plan.meal.recipe.calories != null ? (
+                      <span>{supportPlan.plan.meal.recipe.calories} kcal</span>
+                    ) : null}
+                    {supportPlan.plan.meal.recipe.prep_effort ? (
+                      <span>{supportPlan.plan.meal.recipe.prep_effort} effort</span>
+                    ) : null}
+                    {supportPlan.plan.meal.recipe.cost_level ? (
+                      <span>{supportPlan.plan.meal.recipe.cost_level} cost</span>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {supportPlan.plan.meal.constraints.map((constraint) => (
+                      <Badge key={constraint} variant="secondary" className="text-[11px]">
+                        {constraint.replace(/_/g, " ")}
+                      </Badge>
+                    ))}
+                    {supportPlan.plan.meal.recipe.tags.slice(0, 4).map((tag) => (
+                      <Badge key={tag} variant="outline" className="text-[11px]">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-border/80 bg-background p-4">
+                  <p className="text-sm font-semibold">Why this meal fit today</p>
+                  {supportPlan.plan.meal.why_chosen.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      {supportPlan.plan.meal.why_chosen.map((reason) => (
+                        <p key={reason} className="text-sm text-muted-foreground">
+                          {reason}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-muted-foreground">Detailed meal-fit reasons will appear here once the planner persists them.</p>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-border/80 bg-background p-4">
+                  <p className="text-sm font-semibold">Alternatives considered</p>
+                  {supportPlan.plan.meal.alternatives_considered.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      {supportPlan.plan.meal.alternatives_considered.slice(0, 3).map((item) => (
+                        <p key={`${item.kind}-${item.reference_id || item.title}`} className="text-sm text-muted-foreground">
+                          {formatAlternative(item)}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-muted-foreground">No alternate meal candidates were persisted for this support plan.</p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <EmptyState
+            title="No meal recommendation yet"
+            description="Run a scenario or submit a check-in to generate structured meal context for this page."
+          />
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
           <h2 className="text-lg font-semibold">Recommended For You</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          These recipe matches come from the latest intervention and its meal constraints.
+          These recipe matches are ranked against your current support-plan context and saved meal constraints.
         </p>
         {recommendedLoading ? (
           <RecipeGridSkeleton />
@@ -714,4 +825,11 @@ function RecipeGridSkeleton() {
       ))}
     </div>
   );
+}
+
+function formatAlternative(item: SupportPlanAlternative): string {
+  const parts = [item.title];
+  if (typeof item.rank === "number") parts.push(`rank ${item.rank}`);
+  if (typeof item.score === "number") parts.push(`${Math.round(item.score * 100)} fit`);
+  return parts.join(" · ");
 }

@@ -614,22 +614,34 @@ class CareCoordinatorPipeline:
             wellness_action=draft_plan["wellness_action"]["description"],
             empathy_message=empathy_result["empathy_message"],
             risk_level=risk_result["risk_level"],
+            recipe_id=draft_plan.get("recipe_id"),
+            activity_template_id=draft_plan.get("activity_template_id"),
+            wellness_template_id=draft_plan.get("wellness_template_id"),
             generation_mode=draft_plan.get("generation_mode", "fallback"),
             generation_error=draft_plan.get("generation_error", ""),
             resources=draft_plan.get("resources", []),
             notes=draft_plan.get("notes", ""),
+            why_chosen=draft_plan.get("why_chosen", {}),
+            alternatives_considered=draft_plan.get("alternatives_considered", []),
+            why_changed_from_previous=draft_plan.get("why_changed_from_previous", []),
         ).model_dump()
 
         intervention_payload = {
             "user_id": run_user_id,
             "run_id": run_id,
             "state_snapshot_id": context.get("state_snapshot_id"),
+            "recipe_id": draft_plan.get("recipe_id"),
+            "activity_template_id": draft_plan.get("activity_template_id"),
+            "wellness_template_id": draft_plan.get("wellness_template_id"),
             "meal_suggestion": final_plan["meal_suggestion"],
             "activity_suggestion": final_plan["activity_suggestion"],
             "wellness_action": final_plan["wellness_action"],
             "empathy_message": final_plan["empathy_message"],
             "meal_constraints": draft_plan.get("meal_constraints", []),
             "risk_subscores": risk_result.get("subscores"),
+            "why_chosen": draft_plan.get("why_chosen", {}),
+            "alternatives_considered": draft_plan.get("alternatives_considered", []),
+            "why_changed_from_previous": draft_plan.get("why_changed_from_previous", []),
         }
         intervention_record = self.tool_provider.create_intervention(intervention_payload)
         case_record = None

@@ -92,6 +92,129 @@ export interface RunTraceDto {
   case?: CaseDto | null;
 }
 
+export interface SupportPlanRunDto {
+  id: number;
+  status: RunStatus;
+  risk_level: RiskLevel;
+  started_at: string;
+  completed_at: string | null;
+  normalized_event_id: number | null;
+}
+
+export interface SupportPlanStateSnapshotDto {
+  id: number;
+  run_id: number | null;
+  source: string;
+  created_at: string;
+  dynamic_state: Record<string, unknown>;
+  archetype_scores: Record<string, unknown>;
+}
+
+export interface SupportPlanRiskDto {
+  level: RiskLevel;
+  urgency: string;
+  confidence: number;
+  subscores: Record<string, unknown>;
+  drivers: string[];
+  rationale: string;
+}
+
+export interface SupportPlanRecipeDto {
+  id: number;
+  title: string;
+  description: string;
+  tags: string[];
+  prep_minutes: number;
+  cook_minutes: number;
+  calories?: number | null;
+  protein_grams?: number | null;
+  carbs_grams?: number | null;
+  fat_grams?: number | null;
+  fiber_grams?: number | null;
+  prep_effort?: string | null;
+  cost_level?: string | null;
+  equipment_tags?: string[];
+}
+
+export interface SupportPlanActivityTemplateDto {
+  id: number;
+  title: string;
+  description: string;
+  duration_minutes: number;
+  intensity: string;
+  accessibility_tags?: string[];
+  equipment_tags?: string[];
+  time_cost_level: string;
+  fatigue_sensitivity: string;
+  contraindication_tags?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface SupportPlanWellnessTemplateDto {
+  id: number;
+  title: string;
+  description: string;
+  category: string;
+  duration_minutes: number;
+  accessibility_tags?: string[];
+  time_cost_level: string;
+  fatigue_sensitivity: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SupportPlanMealDto {
+  recipe_id?: number | null;
+  title: string;
+  description: string;
+  text: string;
+  constraints?: string[];
+  why_chosen?: string[];
+  alternatives_considered?: unknown[];
+  recipe?: SupportPlanRecipeDto | null;
+}
+
+export interface SupportPlanActivityDto {
+  template_id?: number | null;
+  title: string;
+  description: string;
+  text: string;
+  duration_minutes?: number | null;
+  intensity?: string | null;
+  why_chosen?: string[];
+  alternatives_considered?: unknown[];
+  template?: SupportPlanActivityTemplateDto | null;
+}
+
+export interface SupportPlanWellnessDto {
+  template_id?: number | null;
+  title: string;
+  description: string;
+  text: string;
+  category?: string | null;
+  why_chosen?: string[];
+  alternatives_considered?: unknown[];
+  template?: SupportPlanWellnessTemplateDto | null;
+}
+
+export interface SupportPlanPlanDto {
+  intervention_id: number;
+  created_at: string;
+  meal: SupportPlanMealDto;
+  activity: SupportPlanActivityDto;
+  wellness: SupportPlanWellnessDto;
+  empathy_message: string;
+  rationale: string;
+  why_changed_from_previous?: string[];
+}
+
+export interface SupportPlanCurrentDto {
+  generated_at: string;
+  run?: SupportPlanRunDto | null;
+  state_snapshot?: SupportPlanStateSnapshotDto | null;
+  risk: SupportPlanRiskDto;
+  plan?: SupportPlanPlanDto | null;
+}
+
 export interface CaseDto {
   id: number;
   user_id: number;

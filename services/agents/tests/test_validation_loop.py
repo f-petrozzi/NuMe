@@ -35,11 +35,23 @@ def _full_plan() -> dict:
             "description": "Pause for breathing.",
             "rationale": "Reduce stress.",
         },
+        "recipe_id": None,
+        "activity_template_id": 5,
+        "wellness_template_id": 11,
         "generation_mode": "llm",
         "generation_error": "",
         "resources": ["Campus counseling"],
         "notes": "Initial notes.",
         "meal_constraints": ["high_protein"],
+        "why_chosen": {
+            "meal": ["Fits the day's prep capacity."],
+            "activity": ["Keeps intensity manageable."],
+            "wellness": ["Provides a fast regulation step."],
+        },
+        "alternatives_considered": [
+            {"kind": "activity", "template_id": 2, "title": "Seated Mobility Reset", "rank": 2}
+        ],
+        "why_changed_from_previous": ["Activity changed to better match today's capacity and recovery signals."],
     }
 
 
@@ -236,6 +248,9 @@ def test_coordinator_run_handles_partial_validation_patch_without_crashing(monke
     assert result["final_plan"]["notes"] == "Validation updated the plan."
     assert result["intervention_record"]["meal_suggestion"] == "A balanced meal."
     assert result["intervention_record"]["risk_subscores"]["physiological_strain"] == 0.61
+    assert result["intervention_record"]["activity_template_id"] == 5
+    assert result["intervention_record"]["wellness_template_id"] == 11
+    assert result["intervention_record"]["why_chosen"]["activity"] == ["Keeps intensity manageable."]
 
 
 def test_coordinator_persists_artifacts_for_run_owner_not_profile_user(monkeypatch):
@@ -346,6 +361,9 @@ def test_coordinator_persists_artifacts_for_run_owner_not_profile_user(monkeypat
     assert captured["case"]["user_id"] == 12
     assert captured["notification"]["user_id"] == 12
     assert captured["intervention"]["risk_subscores"]["recovery_debt"] == 0.58
+    assert captured["intervention"]["activity_template_id"] == 5
+    assert captured["intervention"]["wellness_template_id"] == 11
+    assert captured["intervention"]["alternatives_considered"][0]["kind"] == "activity"
     assert result["intervention_record"]["user_id"] == 12
 
 
