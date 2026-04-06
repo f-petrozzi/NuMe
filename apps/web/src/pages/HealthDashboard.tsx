@@ -126,6 +126,11 @@ function GarminPanel() {
   const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
   const [mfaEmailHint, setMfaEmailHint] = useState<string | null>(null);
 
+  const describeMutationError = (err: Error): string => {
+    const detail = (err as Error & { response?: { data?: { detail?: string } } }).response?.data?.detail;
+    return detail || err.message || "Request failed";
+  };
+
   const resetDialogState = () => {
     setAuthStep("credentials");
     setEmail("");
@@ -172,7 +177,7 @@ function GarminPanel() {
     onError: (err: Error) => {
       setEmail("");
       setPassword("");
-      toast({ title: "Connection failed", description: err.message, variant: "destructive" });
+      toast({ title: "Connection failed", description: describeMutationError(err), variant: "destructive" });
     },
   });
 
@@ -187,7 +192,7 @@ function GarminPanel() {
     },
     onError: (err: Error) => {
       setMfaCode("");
-      toast({ title: "Verification failed", description: err.message, variant: "destructive" });
+      toast({ title: "Verification failed", description: describeMutationError(err), variant: "destructive" });
     },
   });
 
@@ -210,7 +215,7 @@ function GarminPanel() {
       toast({ title: "Sync complete", description: `${result.synced ?? 0} days updated.` });
     },
     onError: (err: Error) => {
-      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+      toast({ title: "Sync failed", description: describeMutationError(err), variant: "destructive" });
     },
   });
 
