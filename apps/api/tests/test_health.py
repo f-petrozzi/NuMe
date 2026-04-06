@@ -171,6 +171,37 @@ async def test_garmin_connect_mfa_completes_connection(client: AsyncClient, monk
     assert status_resp.json()["garmin_email"] == "test@garmin.com"
 
 
+async def test_garmin_connect_maps_upstream_rate_limit_to_429(client: AsyncClient, monkeypatch):
+    class _FakeResponse:
+        status_code = 429
+
+    class _FakeHttpError:
+        response = _FakeResponse()
+
+        def __str__(self) -> str:
+            return "429 Too Many Requests"
+
+    class _FakeGarthHttpError(Exception):
+        def __init__(self) -> None:
+            self.error = _FakeHttpError()
+
+    async def _rate_limited(user_id: int, email: str, password: str) -> None:
+        raise _FakeGarthHttpError()
+
+    monkeypatch.setattr(health.settings, "garmin_enabled", True)
+    monkeypatch.setattr(health, "connect_user", _rate_limited)
+
+    resp = await client.post(
+        "/api/health/garmin/connect",
+        json={"email": "test@garmin.com", "password": "secret123"},
+    )
+
+    assert resp.status_code == 429, resp.text
+    assert resp.json() == {
+        "detail": "Garmin is temporarily rate limiting sign-in attempts. Wait 10 to 15 minutes, then try again.",
+    }
+
+
 def test_garmin_token_cache_is_encrypted_at_rest(tmp_path, monkeypatch):
     source_dir = tmp_path / "source"
     token_dir = tmp_path / "tokens"

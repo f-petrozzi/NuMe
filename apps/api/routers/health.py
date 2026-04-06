@@ -86,6 +86,52 @@ def _garmin_connect_result(
     )
 
 
+def _garmin_http_status_code(exc: Exception) -> int | None:
+    error = getattr(exc, "error", None)
+    response = getattr(error, "response", None)
+    status_code = getattr(response, "status_code", None)
+    return status_code if isinstance(status_code, int) else None
+
+
+def _garmin_auth_http_exception(user_id: int, exc: Exception, *, mfa_step: bool = False) -> HTTPException:
+    status_code = _garmin_http_status_code(exc)
+    exc_name = type(exc).__name__
+
+    if status_code == 429:
+        logger.warning("Garmin auth throttled for user_id=%s during %s", user_id, "mfa" if mfa_step else "login")
+        return HTTPException(
+            status_code=429,
+            detail="Garmin is temporarily rate limiting sign-in attempts. Wait 10 to 15 minutes, then try again.",
+        )
+
+    if status_code in (401, 403):
+        logger.warning("Garmin auth rejected for user_id=%s during %s: %s", user_id, "mfa" if mfa_step else "login", exc_name)
+        return HTTPException(
+            status_code=400,
+            detail=(
+                "Garmin rejected the sign-in attempt before completion. Double-check your credentials or wait a few minutes before retrying."
+                if not mfa_step
+                else "Garmin rejected the verification code. Check the code and try again."
+            ),
+        )
+
+    logger.warning(
+        "Garmin authentication failed for user_id=%s during %s: %s (status=%s)",
+        user_id,
+        "mfa" if mfa_step else "login",
+        exc_name,
+        status_code,
+    )
+    return HTTPException(
+        status_code=400,
+        detail=(
+            "Garmin authentication failed. Check your credentials and try again."
+            if not mfa_step
+            else "Garmin MFA verification failed. Check the code and try again."
+        ),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Overview (cached)
 # ---------------------------------------------------------------------------
@@ -261,11 +307,7 @@ async def garmin_connect(
             mfa_delivery_hint=exc.delivery_hint,
         )
     except Exception as exc:
-        logger.warning("Garmin authentication failed for user_id=%s: %s", user.id, type(exc).__name__)
-        raise HTTPException(
-            status_code=400,
-            detail="Garmin authentication failed. Check your credentials and try again.",
-        ) from exc
+        raise _garmin_auth_http_exception(user.id, exc) from exc
 
     now = datetime.now(timezone.utc)
     # Upsert connection record
@@ -308,11 +350,7 @@ async def garmin_connect_mfa(
     except GarminMfaChallengeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        logger.warning("Garmin MFA verification failed for user_id=%s: %s", user.id, type(exc).__name__)
-        raise HTTPException(
-            status_code=400,
-            detail="Garmin MFA verification failed. Check the code and try again.",
-        ) from exc
+        raise _garmin_auth_http_exception(user.id, exc, mfa_step=True) from exc
 
     now = datetime.now(timezone.utc)
     conn_result = await db.execute(
