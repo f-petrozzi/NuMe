@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import builtins
-from datetime import date
+import json
+from datetime import date, datetime, timezone
 from typing import Optional, get_type_hints
 from unittest.mock import patch
 
 from httpx import AsyncClient
 
+import garmin_sync
 from openai_client import generate_text
 from routers import health
 
@@ -103,3 +105,94 @@ async def test_ai_calorie_estimate_falls_back_when_generate_text_fails(
         "estimated_calories": 0,
         "confidence": "low",
     }
+
+
+async def test_garmin_connect_returns_mfa_challenge(client: AsyncClient, monkeypatch):
+    async def _require_mfa(user_id: int, email: str, password: str) -> None:
+        raise health.GarminMfaRequired(
+            challenge_id="challenge-123",
+            email_hint="t***@g***.com",
+            expires_at=datetime(2026, 4, 5, 15, 10, tzinfo=timezone.utc),
+        )
+
+    monkeypatch.setattr(health.settings, "garmin_enabled", True)
+    monkeypatch.setattr(health, "connect_user", _require_mfa)
+
+    resp = await client.post(
+        "/api/health/garmin/connect",
+        json={"email": "test@garmin.com", "password": "secret123"},
+    )
+
+    assert resp.status_code == 202, resp.text
+    assert resp.json() == {
+        "connected": False,
+        "user_id": 1,
+        "garmin_email": None,
+        "last_sync": None,
+        "auth_state": "mfa_required",
+        "mfa_challenge_id": "challenge-123",
+        "mfa_expires_at": "2026-04-05T15:10:00Z",
+        "mfa_delivery_hint": "Garmin sent a verification code to your email. Enter it to finish connecting.",
+        "mfa_email_hint": "t***@g***.com",
+    }
+
+
+async def test_garmin_connect_mfa_completes_connection(client: AsyncClient, monkeypatch):
+    async def _complete_mfa(user_id: int, challenge_id: str, code: str) -> str:
+        assert user_id == 1
+        assert challenge_id == "challenge-123"
+        assert code == "123456"
+        return "test@garmin.com"
+
+    monkeypatch.setattr(health.settings, "garmin_enabled", True)
+    monkeypatch.setattr(health, "complete_mfa_connect", _complete_mfa)
+
+    resp = await client.post(
+        "/api/health/garmin/connect/mfa",
+        json={"challenge_id": "challenge-123", "code": "123456"},
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json() == {
+        "connected": True,
+        "user_id": 1,
+        "garmin_email": "test@garmin.com",
+        "last_sync": None,
+        "auth_state": "connected",
+        "mfa_challenge_id": None,
+        "mfa_expires_at": None,
+        "mfa_delivery_hint": None,
+        "mfa_email_hint": None,
+    }
+
+    status_resp = await client.get("/api/health/garmin/auth-status")
+    assert status_resp.status_code == 200, status_resp.text
+    assert status_resp.json()["connected"] is True
+    assert status_resp.json()["garmin_email"] == "test@garmin.com"
+
+
+def test_garmin_token_cache_is_encrypted_at_rest(tmp_path, monkeypatch):
+    source_dir = tmp_path / "source"
+    token_dir = tmp_path / "tokens"
+    source_dir.mkdir()
+    token_dir.mkdir()
+    monkeypatch.setattr(garmin_sync.settings, "garmin_token_dir", str(tmp_path))
+    monkeypatch.setattr(garmin_sync.settings, "garmin_token_encryption_key", "unit-test-secret")
+
+    oauth1_payload = {"token": "oauth1-secret"}
+    oauth2_payload = {"token": "oauth2-secret"}
+    (source_dir / "oauth1_token.json").write_text(json.dumps(oauth1_payload), encoding="utf-8")
+    (source_dir / "oauth2_token.json").write_text(json.dumps(oauth2_payload), encoding="utf-8")
+
+    garmin_sync._persist_tokenstore_dir(str(source_dir), str(token_dir))
+
+    assert not (token_dir / "oauth1_token.json").exists()
+    assert not (token_dir / "oauth2_token.json").exists()
+    assert (token_dir / "oauth1_token.json.enc").exists()
+    assert (token_dir / "oauth2_token.json.enc").exists()
+
+    with garmin_sync._decrypted_tokenstore(str(token_dir)) as decrypted_dir:
+        with open(f"{decrypted_dir}/oauth1_token.json", encoding="utf-8") as handle:
+            assert json.load(handle) == oauth1_payload
+        with open(f"{decrypted_dir}/oauth2_token.json", encoding="utf-8") as handle:
+            assert json.load(handle) == oauth2_payload

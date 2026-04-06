@@ -11,11 +11,17 @@ Adapted from Nest homelab app:
 from __future__ import annotations
 
 import asyncio
-import json
+import base64
+import hashlib
 import logging
 import os
-import stat
+import secrets
+import shutil
+import tempfile
+import threading
 import time
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -36,6 +42,8 @@ from settings import settings
 logger = logging.getLogger(__name__)
 
 _GARMIN_TOKEN_FILES = ("oauth1_token.json", "oauth2_token.json")
+_GARMIN_TOKEN_SUFFIX = ".enc"
+_GARMIN_MFA_DELIVERY_HINT = "Garmin sent a verification code to your email. Enter it to finish connecting."
 
 # ---------------------------------------------------------------------------
 # Module-level client registry: user_id → authenticated Garmin client
@@ -46,6 +54,36 @@ _client_lock = asyncio.Lock()
 # In-memory overview cache: user_id → (data_dict, monotonic_ts)
 _METRIC_CACHE: dict[int, tuple[dict, float]] = {}
 _CACHE_TTL = 900.0  # 15 minutes
+_mfa_challenge_lock = threading.Lock()
+
+
+@dataclass
+class _PendingMfaChallenge:
+    user_id: int
+    email: str
+    password: str
+    created_at: datetime
+    expires_at: datetime
+
+
+_pending_mfa_challenges: dict[str, _PendingMfaChallenge] = {}
+
+
+class GarminMfaRequired(RuntimeError):
+    def __init__(self, *, challenge_id: str, email_hint: str, expires_at: datetime):
+        super().__init__("Garmin MFA verification is required")
+        self.challenge_id = challenge_id
+        self.email_hint = email_hint
+        self.expires_at = expires_at
+        self.delivery_hint = _GARMIN_MFA_DELIVERY_HINT
+
+
+class GarminMfaChallengeError(RuntimeError):
+    pass
+
+
+class GarminMfaChallengeExpired(GarminMfaChallengeError):
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -83,32 +121,193 @@ def _ensure_private_dir(path: str) -> None:
     os.chmod(path, 0o700)
 
 
+def _write_private_file(path: str, data: bytes) -> None:
+    with open(path, "wb") as handle:
+        handle.write(data)
+    os.chmod(path, 0o600)
+
+
+def _mask_email(email: str) -> str:
+    local, _, domain = email.partition("@")
+    if not domain:
+        return "***"
+    safe_local = (local[:1] + "***") if local else "***"
+    domain_head, _, domain_tail = domain.partition(".")
+    if not domain_head:
+        return f"{safe_local}@***"
+    return f"{safe_local}@{domain_head[:1]}***.{domain_tail}" if domain_tail else f"{safe_local}@{domain_head[:1]}***"
+
+
 def _has_token_cache(token_dir: str) -> bool:
-    return all(os.path.exists(os.path.join(token_dir, f)) for f in _GARMIN_TOKEN_FILES)
+    return all(
+        os.path.exists(os.path.join(token_dir, f"{filename}{_GARMIN_TOKEN_SUFFIX}"))
+        or os.path.exists(os.path.join(token_dir, filename))
+        for filename in _GARMIN_TOKEN_FILES
+    )
+
+
+def _token_encryption_secret() -> str:
+    explicit = settings.garmin_token_encryption_key.strip()
+    if explicit:
+        return explicit
+    for candidate in (settings.internal_api_token, settings.clerk_secret_key, settings.clerk_jwt_key):
+        if candidate.strip():
+            return candidate.strip()
+    raise RuntimeError(
+        "Garmin token encryption key is not configured. Set GARMIN_TOKEN_ENCRYPTION_KEY "
+        "or a server secret before enabling Garmin login."
+    )
+
+
+def _token_cipher():
+    try:
+        from cryptography.fernet import Fernet  # type: ignore[import]
+    except ImportError as exc:
+        raise RuntimeError("cryptography package is required for Garmin token encryption") from exc
+
+    key_material = hashlib.sha256(_token_encryption_secret().encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(key_material))
+
+
+def _encrypt_token_bytes(payload: bytes) -> bytes:
+    return _token_cipher().encrypt(payload)
+
+
+def _decrypt_token_bytes(payload: bytes) -> bytes:
+    try:
+        from cryptography.fernet import InvalidToken  # type: ignore[import]
+    except ImportError as exc:
+        raise RuntimeError("cryptography package is required for Garmin token encryption") from exc
+
+    try:
+        return _token_cipher().decrypt(payload)
+    except InvalidToken as exc:
+        raise RuntimeError("Stored Garmin token cache could not be decrypted") from exc
+
+
+def _persist_tokenstore_dir(source_dir: str, token_dir: str) -> None:
+    _ensure_private_dir(token_dir)
+    for filename in _GARMIN_TOKEN_FILES:
+        source_path = os.path.join(source_dir, filename)
+        if not os.path.exists(source_path):
+            continue
+        encrypted_path = os.path.join(token_dir, f"{filename}{_GARMIN_TOKEN_SUFFIX}")
+        plaintext_path = os.path.join(token_dir, filename)
+        with open(source_path, "rb") as handle:
+            payload = _encrypt_token_bytes(handle.read())
+        _write_private_file(encrypted_path, payload)
+        if os.path.exists(plaintext_path):
+            os.remove(plaintext_path)
+
+
+@contextmanager
+def _decrypted_tokenstore(token_dir: str):
+    _ensure_private_dir(settings.garmin_token_dir)
+    with tempfile.TemporaryDirectory(prefix="garmin-tokenstore-", dir=settings.garmin_token_dir) as temp_dir:
+        _ensure_private_dir(temp_dir)
+        for filename in _GARMIN_TOKEN_FILES:
+            encrypted_path = os.path.join(token_dir, f"{filename}{_GARMIN_TOKEN_SUFFIX}")
+            plaintext_path = os.path.join(token_dir, filename)
+            target_path = os.path.join(temp_dir, filename)
+            if os.path.exists(encrypted_path):
+                with open(encrypted_path, "rb") as handle:
+                    payload = _decrypt_token_bytes(handle.read())
+                _write_private_file(target_path, payload)
+            elif os.path.exists(plaintext_path):
+                shutil.copyfile(plaintext_path, target_path)
+                os.chmod(target_path, 0o600)
+        yield temp_dir
+
+
+def _persist_client_tokens(client: Any, token_dir: str) -> None:
+    _ensure_private_dir(settings.garmin_token_dir)
+    with tempfile.TemporaryDirectory(prefix="garmin-token-write-", dir=settings.garmin_token_dir) as temp_dir:
+        _ensure_private_dir(temp_dir)
+        client.garth.dump(temp_dir)
+        _persist_tokenstore_dir(temp_dir, token_dir)
+
+
+def _purge_expired_mfa_challenges(now: datetime | None = None) -> None:
+    current = now or datetime.now(timezone.utc)
+    expired = [key for key, challenge in _pending_mfa_challenges.items() if challenge.expires_at <= current]
+    for key in expired:
+        _pending_mfa_challenges.pop(key, None)
+
+
+def _store_mfa_challenge(user_id: int, email: str, password: str) -> GarminMfaRequired:
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(seconds=max(60, settings.garmin_mfa_challenge_ttl_seconds))
+    challenge_id = secrets.token_urlsafe(24)
+    with _mfa_challenge_lock:
+        _purge_expired_mfa_challenges(now)
+        for key, challenge in list(_pending_mfa_challenges.items()):
+            if challenge.user_id == user_id:
+                _pending_mfa_challenges.pop(key, None)
+        _pending_mfa_challenges[challenge_id] = _PendingMfaChallenge(
+            user_id=user_id,
+            email=email,
+            password=password,
+            created_at=now,
+            expires_at=expires_at,
+        )
+    return GarminMfaRequired(challenge_id=challenge_id, email_hint=_mask_email(email), expires_at=expires_at)
+
+
+def _get_mfa_challenge(user_id: int, challenge_id: str) -> _PendingMfaChallenge:
+    now = datetime.now(timezone.utc)
+    with _mfa_challenge_lock:
+        _purge_expired_mfa_challenges(now)
+        challenge = _pending_mfa_challenges.get(challenge_id)
+        if challenge is None or challenge.user_id != user_id:
+            raise GarminMfaChallengeError("Garmin MFA challenge was not found. Start the connection flow again.")
+        if challenge.expires_at <= now:
+            _pending_mfa_challenges.pop(challenge_id, None)
+            raise GarminMfaChallengeExpired("Garmin MFA challenge expired. Start the connection flow again.")
+        return challenge
+
+
+def clear_mfa_challenges(user_id: int) -> None:
+    with _mfa_challenge_lock:
+        _purge_expired_mfa_challenges()
+        for key, challenge in list(_pending_mfa_challenges.items()):
+            if challenge.user_id == user_id:
+                _pending_mfa_challenges.pop(key, None)
+
+
+def _consume_mfa_challenge(challenge_id: str) -> None:
+    with _mfa_challenge_lock:
+        _pending_mfa_challenges.pop(challenge_id, None)
 
 
 # ---------------------------------------------------------------------------
 # Client lifecycle
 # ---------------------------------------------------------------------------
 
-def _load_garmin_client_sync(email: str, password: str, token_dir: str) -> Any:
+def _load_garmin_client_sync(user_id: int, email: str, password: str, token_dir: str, mfa_code: str | None = None) -> Any:
     """Synchronous — always called via asyncio.to_thread()."""
     try:
         from garminconnect import Garmin  # type: ignore[import]
     except ImportError:
         raise RuntimeError("garminconnect package is not installed")
 
-    client = Garmin(email=email, password=password, is_cn=False, prompt_mfa=None)
+    def _prompt_mfa() -> str:
+        normalized_code = "".join((mfa_code or "").split())
+        if normalized_code:
+            return normalized_code
+        raise _store_mfa_challenge(user_id, email, password)
+
+    client = Garmin(email=email, password=password, is_cn=False, prompt_mfa=_prompt_mfa)
     if _has_token_cache(token_dir):
-        try:
-            client.login(tokenstore=token_dir)
-            return client
-        except Exception:
-            logger.warning("Garmin token cache stale for %s — re-authenticating", token_dir)
+        with _decrypted_tokenstore(token_dir) as cached_tokenstore:
+            try:
+                client.login(tokenstore=cached_tokenstore)
+                _persist_client_tokens(client, token_dir)
+                return client
+            except Exception:
+                logger.warning("Garmin token cache stale for %s — re-authenticating", token_dir)
 
     client.login()
-    _ensure_private_dir(token_dir)
-    client.garth.dump(token_dir)
+    _persist_client_tokens(client, token_dir)
     return client
 
 
@@ -141,11 +340,11 @@ async def init_garmin_clients(user_id: int | None = None) -> None:
 
     async with _client_lock:
         try:
-            client = await asyncio.to_thread(_load_garmin_client_sync, email, password, tdir)
+            client = await asyncio.to_thread(_load_garmin_client_sync, target_id, email, password, tdir)
             _garmin_clients[target_id] = client
-            logger.info("Garmin client ready for user_id=%s (%s)", target_id, email)
+            logger.info("Garmin client ready for user_id=%s (%s)", target_id, _mask_email(email))
         except Exception as exc:
-            logger.error("Garmin auth failed for user_id=%s: %s", target_id, exc)
+            logger.error("Garmin auth failed for user_id=%s: %s", target_id, type(exc).__name__)
 
 
 async def _get_client(user_id: int) -> Any | None:
@@ -172,18 +371,39 @@ async def connect_user(user_id: int, email: str, password: str) -> None:
     _ensure_private_dir(settings.garmin_token_dir)
     _ensure_private_dir(tdir)
     async with _client_lock:
-        client = await asyncio.to_thread(_load_garmin_client_sync, email, password, tdir)
+        client = await asyncio.to_thread(_load_garmin_client_sync, user_id, email, password, tdir)
         _garmin_clients[user_id] = client
-    logger.info("Garmin connected for user_id=%s (%s)", user_id, email)
+    clear_mfa_challenges(user_id)
+    logger.info("Garmin connected for user_id=%s (%s)", user_id, _mask_email(email))
+
+
+async def complete_mfa_connect(user_id: int, challenge_id: str, code: str) -> str:
+    challenge = _get_mfa_challenge(user_id, challenge_id)
+    tdir = _token_dir(user_id)
+    _ensure_private_dir(settings.garmin_token_dir)
+    _ensure_private_dir(tdir)
+    async with _client_lock:
+        client = await asyncio.to_thread(
+            _load_garmin_client_sync,
+            user_id,
+            challenge.email,
+            challenge.password,
+            tdir,
+            code,
+        )
+        _garmin_clients[user_id] = client
+    _consume_mfa_challenge(challenge_id)
+    clear_mfa_challenges(user_id)
+    logger.info("Garmin MFA completed for user_id=%s (%s)", user_id, _mask_email(challenge.email))
+    return challenge.email
 
 
 async def disconnect_user(user_id: int) -> None:
     """Remove the in-memory client and delete cached tokens from disk."""
-    import shutil
-
     async with _client_lock:
         _garmin_clients.pop(user_id, None)
     _cache_invalidate(user_id)
+    clear_mfa_challenges(user_id)
     tdir = _token_dir(user_id)
     if os.path.exists(tdir):
         await asyncio.to_thread(shutil.rmtree, tdir, ignore_errors=True)

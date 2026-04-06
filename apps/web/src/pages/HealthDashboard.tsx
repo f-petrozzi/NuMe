@@ -12,6 +12,7 @@ import {
   getGarminAuthStatus,
   getHealthSummary,
   getSleepHistory,
+  submitGarminMfaCode,
   triggerGarminSync,
 } from "@/lib/api";
 import { motion } from "framer-motion";
@@ -118,8 +119,28 @@ function GarminPanel() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [authStep, setAuthStep] = useState<"credentials" | "mfa">("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
+  const [mfaEmailHint, setMfaEmailHint] = useState<string | null>(null);
+
+  const resetDialogState = () => {
+    setAuthStep("credentials");
+    setEmail("");
+    setPassword("");
+    setMfaCode("");
+    setMfaChallengeId(null);
+    setMfaEmailHint(null);
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      resetDialogState();
+    }
+  };
 
   const { data: status, isLoading } = useQuery({
     queryKey: ["garmin-status"],
@@ -128,16 +149,45 @@ function GarminPanel() {
 
   const connectMut = useMutation({
     mutationFn: ({ e, p }: { e: string; p: string }) => connectGarmin(e, p),
+    onSuccess: (result) => {
+      setPassword("");
+      if (result.auth_state === "mfa_required") {
+        setAuthStep("mfa");
+        setMfaChallengeId(result.mfa_challenge_id);
+        setMfaEmailHint(result.mfa_email_hint);
+        setEmail("");
+        toast({
+          title: "Verification required",
+          description: result.mfa_delivery_hint || "Enter the Garmin verification code to finish connecting.",
+        });
+        return;
+      }
+
+      qc.invalidateQueries({ queryKey: ["garmin-status"] });
+      qc.invalidateQueries({ queryKey: ["health"] });
+      setDialogOpen(false);
+      resetDialogState();
+      toast({ title: "Garmin connected", description: "Your account is linked and data will sync shortly." });
+    },
+    onError: (err: Error) => {
+      setEmail("");
+      setPassword("");
+      toast({ title: "Connection failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const verifyMfaMut = useMutation({
+    mutationFn: ({ challengeId, code }: { challengeId: string; code: string }) => submitGarminMfaCode(challengeId, code),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["garmin-status"] });
       qc.invalidateQueries({ queryKey: ["health"] });
       setDialogOpen(false);
-      setEmail("");
-      setPassword("");
+      resetDialogState();
       toast({ title: "Garmin connected", description: "Your account is linked and data will sync shortly." });
     },
     onError: (err: Error) => {
-      toast({ title: "Connection failed", description: err.message, variant: "destructive" });
+      setMfaCode("");
+      toast({ title: "Verification failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -223,44 +273,97 @@ function GarminPanel() {
         </div>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Connect Garmin account</DialogTitle>
             <DialogDescription>
-              Enter your Garmin Connect credentials. They are sent directly to the backend and are not stored in the browser.
+              {authStep === "credentials"
+                ? "Enter your Garmin Connect credentials. They are sent to the backend only for authentication and cleared from the browser after submit."
+                : `Enter the Garmin verification code${mfaEmailHint ? ` sent to ${mfaEmailHint}` : ""}.`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="garmin-email">Garmin email</Label>
-              <Input
-                id="garmin-email"
-                type="email"
-                autoComplete="username"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="garmin-password">Password</Label>
-              <Input
-                id="garmin-password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-            </div>
-            <Button
-              className="w-full"
-              disabled={!email || !password || connectMut.isPending}
-              onClick={() => connectMut.mutate({ e: email, p: password })}
-            >
-              {connectMut.isPending ? "Connecting…" : "Connect"}
-            </Button>
+            {authStep === "credentials" ? (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="garmin-email">Garmin email</Label>
+                  <Input
+                    id="garmin-email"
+                    type="email"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="garmin-password">Password</Label>
+                  <Input
+                    id="garmin-password"
+                    type="password"
+                    autoComplete="off"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                  />
+                </div>
+                <Button
+                  className="w-full"
+                  disabled={!email || !password || connectMut.isPending}
+                  onClick={() => {
+                    const nextEmail = email.trim();
+                    const nextPassword = password;
+                    setEmail("");
+                    setPassword("");
+                    connectMut.mutate({ e: nextEmail, p: nextPassword });
+                  }}
+                >
+                  {connectMut.isPending ? "Connecting…" : "Connect"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="garmin-mfa-code">Verification code</Label>
+                  <Input
+                    id="garmin-mfa-code"
+                    type="text"
+                    autoComplete="one-time-code"
+                    inputMode="numeric"
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\s+/g, ""))}
+                    placeholder="123456"
+                  />
+                </div>
+                <Button
+                  className="w-full"
+                  disabled={!mfaChallengeId || !mfaCode || verifyMfaMut.isPending}
+                  onClick={() => {
+                    if (!mfaChallengeId) return;
+                    const nextCode = mfaCode;
+                    setMfaCode("");
+                    verifyMfaMut.mutate({ challengeId: mfaChallengeId, code: nextCode });
+                  }}
+                >
+                  {verifyMfaMut.isPending ? "Verifying…" : "Verify code"}
+                </Button>
+                <Button
+                  className="w-full"
+                  variant="ghost"
+                  disabled={verifyMfaMut.isPending}
+                  onClick={() => {
+                    setAuthStep("credentials");
+                    setMfaCode("");
+                    setMfaChallengeId(null);
+                    setMfaEmailHint(null);
+                  }}
+                >
+                  Start over
+                </Button>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>

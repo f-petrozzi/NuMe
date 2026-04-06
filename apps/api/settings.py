@@ -54,8 +54,10 @@ class Settings(BaseSettings):
     garmin_username: str = ""
     garmin_password: str = ""
     garmin_token_dir: str = "./garmin_tokens"
+    garmin_token_encryption_key: str = ""
     garmin_sync_interval_min: int = 45
     garmin_sync_days_back: int = 30
+    garmin_mfa_challenge_ttl_seconds: int = 600
 
     # AI endpoint controls
     ai_endpoints_enabled: bool = True  # Hard stop: False = all AI endpoints return 503

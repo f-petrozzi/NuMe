@@ -403,6 +403,20 @@ export interface GarminAuthStatusDto {
   last_sync: string | null;
 }
 
+export type GarminConnectAuthStateDto = "connected" | "mfa_required";
+
+export interface GarminConnectResultDto {
+  connected: boolean;
+  user_id: number | null;
+  garmin_email: string | null;
+  last_sync: string | null;
+  auth_state: GarminConnectAuthStateDto;
+  mfa_challenge_id: string | null;
+  mfa_expires_at: string | null;
+  mfa_delivery_hint: string | null;
+  mfa_email_hint: string | null;
+}
+
 export interface DailyMetricsDto {
   id: number;
   user_id: number;

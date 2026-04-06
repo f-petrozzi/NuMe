@@ -6,6 +6,7 @@ import type {
   CalorieEstimateDto,
   CalorieLogDto,
   CheckInSubmission,
+  GarminConnectResultDto,
   DailyMetricsDto,
   DailyQuotaDto,
   GarminAuthStatusDto,
@@ -494,8 +495,16 @@ async function getGarminAuthStatusLive(): Promise<GarminAuthStatusDto> {
   return data;
 }
 
-async function connectGarminLive(email: string, password: string): Promise<GarminAuthStatusDto> {
-  const { data } = await apiClient.post<GarminAuthStatusDto>("/api/health/garmin/connect", { email, password });
+async function connectGarminLive(email: string, password: string): Promise<GarminConnectResultDto> {
+  const { data } = await apiClient.post<GarminConnectResultDto>("/api/health/garmin/connect", { email, password });
+  return data;
+}
+
+async function submitGarminMfaCodeLive(challengeId: string, code: string): Promise<GarminConnectResultDto> {
+  const { data } = await apiClient.post<GarminConnectResultDto>("/api/health/garmin/connect/mfa", {
+    challenge_id: challengeId,
+    code,
+  });
   return data;
 }
 
@@ -513,9 +522,34 @@ async function getGarminAuthStatusMock(): Promise<GarminAuthStatusDto> {
   return { connected: false, user_id: null, garmin_email: null, last_sync: null };
 }
 
-async function connectGarminMock(_email: string, _password: string): Promise<GarminAuthStatusDto> {
+async function connectGarminMock(_email: string, _password: string): Promise<GarminConnectResultDto> {
   await delay(800);
-  return { connected: true, user_id: 1, garmin_email: _email, last_sync: null };
+  return {
+    connected: true,
+    user_id: 1,
+    garmin_email: _email,
+    last_sync: null,
+    auth_state: "connected",
+    mfa_challenge_id: null,
+    mfa_expires_at: null,
+    mfa_delivery_hint: null,
+    mfa_email_hint: null,
+  };
+}
+
+async function submitGarminMfaCodeMock(): Promise<GarminConnectResultDto> {
+  await delay(600);
+  return {
+    connected: true,
+    user_id: 1,
+    garmin_email: "member@garmin.com",
+    last_sync: null,
+    auth_state: "connected",
+    mfa_challenge_id: null,
+    mfa_expires_at: null,
+    mfa_delivery_hint: null,
+    mfa_email_hint: null,
+  };
 }
 
 async function disconnectGarminMock(): Promise<void> {
@@ -531,8 +565,12 @@ export async function getGarminAuthStatus(): Promise<GarminAuthStatusDto> {
   return appConfig.useMockApi ? getGarminAuthStatusMock() : getGarminAuthStatusLive();
 }
 
-export async function connectGarmin(email: string, password: string): Promise<GarminAuthStatusDto> {
+export async function connectGarmin(email: string, password: string): Promise<GarminConnectResultDto> {
   return appConfig.useMockApi ? connectGarminMock(email, password) : connectGarminLive(email, password);
+}
+
+export async function submitGarminMfaCode(challengeId: string, code: string): Promise<GarminConnectResultDto> {
+  return appConfig.useMockApi ? submitGarminMfaCodeMock() : submitGarminMfaCodeLive(challengeId, code);
 }
 
 export async function disconnectGarmin(): Promise<void> {

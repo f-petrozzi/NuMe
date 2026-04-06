@@ -7,7 +7,7 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,11 @@ from dependencies.rate_limit import COST_LIGHT, enforce_ai_rate_limit, require_a
 from garmin_sync import (
     _cache_get,
     _cache_set,
+    GarminMfaChallengeError,
+    GarminMfaChallengeExpired,
+    GarminMfaRequired,
+    clear_mfa_challenges,
+    complete_mfa_connect,
     connect_user,
     disconnect_user,
     get_connected_user_ids,
@@ -42,12 +47,43 @@ from schemas.health import (
     DailyMetricsOut,
     GarminAuthStatus,
     GarminConnectIn,
+    GarminConnectMfaIn,
+    GarminConnectResult,
     HealthOverviewOut,
     SleepSessionOut,
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/health", tags=["health"])
+
+
+def _normalized_garmin_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def _garmin_connect_result(
+    *,
+    user_id: int,
+    garmin_email: str,
+    connected: bool,
+    auth_state: str,
+    last_sync: datetime | None = None,
+    mfa_challenge_id: str | None = None,
+    mfa_expires_at: datetime | None = None,
+    mfa_email_hint: str | None = None,
+    mfa_delivery_hint: str | None = None,
+) -> GarminConnectResult:
+    return GarminConnectResult(
+        connected=connected,
+        user_id=user_id,
+        garmin_email=garmin_email if connected else None,
+        last_sync=last_sync,
+        auth_state=auth_state,
+        mfa_challenge_id=mfa_challenge_id,
+        mfa_expires_at=mfa_expires_at,
+        mfa_email_hint=mfa_email_hint,
+        mfa_delivery_hint=mfa_delivery_hint,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -199,19 +235,37 @@ async def garmin_auth_status(
     )
 
 
-@router.post("/garmin/connect", response_model=GarminAuthStatus, status_code=201)
+@router.post("/garmin/connect", response_model=GarminConnectResult)
 async def garmin_connect(
     body: GarminConnectIn,
+    response: Response,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Link a Garmin account to this user. Authenticates immediately and caches tokens."""
     if not settings.garmin_enabled:
         raise HTTPException(status_code=400, detail="Garmin integration is not enabled in server config")
+    garmin_email = _normalized_garmin_email(str(body.email))
     try:
-        await connect_user(user.id, body.email, body.password)
+        await connect_user(user.id, garmin_email, body.password.get_secret_value())
+    except GarminMfaRequired as exc:
+        response.status_code = status.HTTP_202_ACCEPTED
+        return _garmin_connect_result(
+            user_id=user.id,
+            garmin_email=garmin_email,
+            connected=False,
+            auth_state="mfa_required",
+            mfa_challenge_id=exc.challenge_id,
+            mfa_expires_at=exc.expires_at,
+            mfa_email_hint=exc.email_hint,
+            mfa_delivery_hint=exc.delivery_hint,
+        )
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Garmin authentication failed: {exc}") from exc
+        logger.warning("Garmin authentication failed for user_id=%s: %s", user.id, type(exc).__name__)
+        raise HTTPException(
+            status_code=400,
+            detail="Garmin authentication failed. Check your credentials and try again.",
+        ) from exc
 
     now = datetime.now(timezone.utc)
     # Upsert connection record
@@ -220,19 +274,65 @@ async def garmin_connect(
     )
     conn_row = conn_result.scalar_one_or_none()
     if conn_row:
-        conn_row.garmin_email = body.email
+        conn_row.garmin_email = garmin_email
         conn_row.connected_at = now
     else:
-        conn_row = GarminConnection(user_id=user.id, garmin_email=body.email, connected_at=now)
+        conn_row = GarminConnection(user_id=user.id, garmin_email=garmin_email, connected_at=now)
         db.add(conn_row)
     await db.commit()
     await db.refresh(conn_row)
 
-    return GarminAuthStatus(
-        connected=True,
+    response.status_code = status.HTTP_201_CREATED
+    return _garmin_connect_result(
         user_id=user.id,
         garmin_email=conn_row.garmin_email,
-        last_sync=None,
+        connected=True,
+        auth_state="connected",
+    )
+
+
+@router.post("/garmin/connect/mfa", response_model=GarminConnectResult, status_code=201)
+async def garmin_connect_mfa(
+    body: GarminConnectMfaIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not settings.garmin_enabled:
+        raise HTTPException(status_code=400, detail="Garmin integration is not enabled in server config")
+    try:
+        garmin_email = _normalized_garmin_email(
+            await complete_mfa_connect(user.id, body.challenge_id, body.code.get_secret_value())
+        )
+    except GarminMfaChallengeExpired as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GarminMfaChallengeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("Garmin MFA verification failed for user_id=%s: %s", user.id, type(exc).__name__)
+        raise HTTPException(
+            status_code=400,
+            detail="Garmin MFA verification failed. Check the code and try again.",
+        ) from exc
+
+    now = datetime.now(timezone.utc)
+    conn_result = await db.execute(
+        select(GarminConnection).where(GarminConnection.user_id == user.id)
+    )
+    conn_row = conn_result.scalar_one_or_none()
+    if conn_row:
+        conn_row.garmin_email = garmin_email
+        conn_row.connected_at = now
+    else:
+        conn_row = GarminConnection(user_id=user.id, garmin_email=garmin_email, connected_at=now)
+        db.add(conn_row)
+    await db.commit()
+    await db.refresh(conn_row)
+
+    return _garmin_connect_result(
+        user_id=user.id,
+        garmin_email=conn_row.garmin_email,
+        connected=True,
+        auth_state="connected",
     )
 
 
@@ -242,6 +342,7 @@ async def garmin_disconnect(
     db: AsyncSession = Depends(get_db),
 ):
     """Unlink Garmin — removes in-memory client, token files, and DB record."""
+    clear_mfa_challenges(user.id)
     await disconnect_user(user.id)
     await db.execute(
         delete(GarminConnection).where(GarminConnection.user_id == user.id)

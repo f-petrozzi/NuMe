@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, SecretStr, field_validator
 
 
 class HealthOverviewOut(BaseModel):
@@ -96,8 +96,41 @@ class GarminAuthStatus(BaseModel):
 
 
 class GarminConnectIn(BaseModel):
-    email: str
-    password: str
+    email: EmailStr
+    password: SecretStr
+
+
+class GarminConnectMfaIn(BaseModel):
+    challenge_id: str
+    code: SecretStr
+
+    @field_validator("challenge_id")
+    @classmethod
+    def validate_challenge_id(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) < 8:
+            raise ValueError("Invalid challenge id")
+        return cleaned
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: SecretStr) -> SecretStr:
+        cleaned = "".join(value.get_secret_value().split())
+        if len(cleaned) < 4 or len(cleaned) > 12:
+            raise ValueError("Invalid MFA code")
+        return SecretStr(cleaned)
+
+
+class GarminConnectResult(BaseModel):
+    connected: bool
+    user_id: Optional[int]
+    garmin_email: Optional[str] = None
+    last_sync: Optional[datetime] = None
+    auth_state: Literal["connected", "mfa_required"]
+    mfa_challenge_id: Optional[str] = None
+    mfa_expires_at: Optional[datetime] = None
+    mfa_delivery_hint: Optional[str] = None
+    mfa_email_hint: Optional[str] = None
 
 
 class CalorieLogIn(BaseModel):

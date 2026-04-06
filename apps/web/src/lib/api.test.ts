@@ -15,6 +15,7 @@ import {
   logSupportPlanFeedback,
   getSupportPlan,
   refreshSessionUser,
+  submitGarminMfaCode,
   triggerGarminSync,
 } from "@/lib/api";
 import { apiClient } from "@/lib/api-client";
@@ -69,11 +70,44 @@ describe("Garmin integration API", () => {
 
   it("connectGarmin posts email and password and returns status", async () => {
     const postSpy = vi.spyOn(apiClient, "post").mockResolvedValueOnce(
-      mockResponse({ connected: true, user_id: 1, garmin_email: "test@garmin.com", last_sync: null }),
+      mockResponse({
+        connected: true,
+        user_id: 1,
+        garmin_email: "test@garmin.com",
+        last_sync: null,
+        auth_state: "connected",
+        mfa_challenge_id: null,
+        mfa_expires_at: null,
+        mfa_delivery_hint: null,
+        mfa_email_hint: null,
+      }),
     );
     const result = await connectGarmin("test@garmin.com", "secret");
     expect(postSpy).toHaveBeenCalledWith("/api/health/garmin/connect", { email: "test@garmin.com", password: "secret" });
     expect(result.connected).toBe(true);
+    expect(result.auth_state).toBe("connected");
+  });
+
+  it("connectGarmin can return an MFA challenge response", async () => {
+    vi.spyOn(apiClient, "post").mockResolvedValueOnce(
+      mockResponse({
+        connected: false,
+        user_id: 1,
+        garmin_email: null,
+        last_sync: null,
+        auth_state: "mfa_required",
+        mfa_challenge_id: "challenge-123",
+        mfa_expires_at: "2026-04-05T15:10:00Z",
+        mfa_delivery_hint: "Enter the emailed Garmin code.",
+        mfa_email_hint: "t***@g***.com",
+      }),
+    );
+
+    const result = await connectGarmin("test@garmin.com", "secret");
+
+    expect(result.connected).toBe(false);
+    expect(result.auth_state).toBe("mfa_required");
+    expect(result.mfa_challenge_id).toBe("challenge-123");
   });
 
   it("connectGarmin propagates HTTP errors", async () => {
@@ -81,6 +115,30 @@ describe("Garmin integration API", () => {
     await expect(connectGarmin("bad@example.com", "wrong")).rejects.toMatchObject({
       response: { status: 400 },
     });
+  });
+
+  it("submitGarminMfaCode posts challenge id and code", async () => {
+    const postSpy = vi.spyOn(apiClient, "post").mockResolvedValueOnce(
+      mockResponse({
+        connected: true,
+        user_id: 1,
+        garmin_email: "test@garmin.com",
+        last_sync: null,
+        auth_state: "connected",
+        mfa_challenge_id: null,
+        mfa_expires_at: null,
+        mfa_delivery_hint: null,
+        mfa_email_hint: null,
+      }),
+    );
+
+    const result = await submitGarminMfaCode("challenge-123", "123456");
+
+    expect(postSpy).toHaveBeenCalledWith("/api/health/garmin/connect/mfa", {
+      challenge_id: "challenge-123",
+      code: "123456",
+    });
+    expect(result.connected).toBe(true);
   });
 
   it("disconnectGarmin calls DELETE endpoint", async () => {
