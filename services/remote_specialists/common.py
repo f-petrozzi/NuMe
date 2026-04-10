@@ -24,8 +24,12 @@ for path in (str(REPO_ROOT), str(AGENTS_DIR)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from llm_utils import OpenAIJsonClient, build_json_prompt
-from schemas import SpecialistResult
+try:
+    from services.agents.llm_utils import OpenAIJsonClient, build_json_prompt
+    from services.agents.schemas import SpecialistResult
+except ImportError:
+    from llm_utils import OpenAIJsonClient, build_json_prompt
+    from schemas import SpecialistResult
 
 
 class SpecialistRequest(BaseModel):

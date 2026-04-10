@@ -15,8 +15,6 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-pytest_plugins = ("pytest_asyncio.plugin",)
-
 # ---------------------------------------------------------------------------
 # The app must be imported AFTER we've set a dummy DATABASE_URL so pydantic
 # settings doesn't choke on a missing env var.
