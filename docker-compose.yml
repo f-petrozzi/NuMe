@@ -68,8 +68,10 @@ services:
       db:
         condition: service_healthy
     networks:
+      # nume-api is publicly reachable via the Cloudflare tunnel. Keep it OFF the core
+      # homelab_network so a compromise can't pivot L2 to HA/AdGuard/Portainer. cloudflared
+      # joins nme_default (see main docker-compose.yml) to reach this alias for ingress.
       default:
-      homelab_public:
         aliases:
           - nume-api
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -162,8 +164,3 @@ services:
 volumes:
   pgdata:
   garmin_tokens:
-
-networks:
-  homelab_public:
-    external: true
-    name: homelab_network

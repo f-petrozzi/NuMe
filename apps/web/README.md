@@ -33,7 +33,7 @@ VITE_USE_MOCK_API=false
 VITE_CLERK_PUBLISHABLE_KEY=<your Clerk publishable key>
 ```
 
-This app uses `BrowserRouter`, so the checked-in [`_redirects`](/mnt/ssd/homelab/NüMe/apps/web/public/_redirects)
+This app uses `BrowserRouter`, so the checked-in [`_redirects`](public/_redirects)
 file is required for direct route loads on Cloudflare Pages.
 
 ## Current integration state

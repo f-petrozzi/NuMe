@@ -93,7 +93,7 @@ uvicorn main:app --reload --port 8000
 Docker Compose flow:
 
 ```bash
-cd /mnt/ssd/homelab/NüMe
+cd /mnt/ssd/homelab/projects/NüMe
 docker compose up db -d
 docker compose run --rm api alembic upgrade head
 docker compose up -d api web specialist-student specialist-caregiver

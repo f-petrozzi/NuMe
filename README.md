@@ -115,7 +115,7 @@ Production is split intentionally:
 
 This repo no longer uses a NüMe-local `cloudflared` config. Tunnel routing is managed in the shared infrastructure stack.
 
-The recommended next-step architecture is documented in [`docs/deployment/cloudflare-supabase.md`](/mnt/ssd/homelab/NüMe/docs/deployment/cloudflare-supabase.md).
+The recommended next-step architecture is documented in [`docs/deployment/cloudflare-supabase.md`](docs/deployment/cloudflare-supabase.md).
 
 ## Selected Docs
 
